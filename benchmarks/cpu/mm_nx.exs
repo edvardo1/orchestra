@@ -44,8 +44,8 @@ size = String.to_integer(arg)
 IO.puts("Using Nx backend: #{inspect(Nx.default_backend())}\n")
 
 # Generate random matrices in CPU memory
-mat1 = OCLPolyHok.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
-mat2 = OCLPolyHok.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
+mat1 = Orchestra.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
+mat2 = Orchestra.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
 
 timing_start = System.monotonic_time()
 

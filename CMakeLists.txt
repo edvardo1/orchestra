@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(OCL_PolyHok_Runtime VERSION 0.1.0 LANGUAGES CXX)
+project(Orchestra_Runtime VERSION 0.1.0 LANGUAGES CXX)
 
 # Set C++ standard to C++17
 set(CMAKE_CXX_STANDARD 17)

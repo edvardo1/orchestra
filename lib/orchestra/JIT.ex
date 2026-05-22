@@ -1,4 +1,4 @@
-require OCLPolyHok.OpenCLBackend
+require Orchestra.OpenCLBackend
 
 defmodule JIT do
   # Preprocesses the formal parameters of a function. It extracts variable names and deals with
@@ -19,8 +19,8 @@ defmodule JIT do
   defp get_param_list(para, inf_types) do
     para
     |> Enum.map(fn
-      {:atomic, p} -> OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p))
-      p -> OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p))
+      {:atomic, p} -> Orchestra.OpenCLBackend.gen_para(p, Map.get(inf_types, p))
+      p -> Orchestra.OpenCLBackend.gen_para(p, Map.get(inf_types, p))
     end)
     |> Enum.filter(fn p -> p != nil end)
     |> Enum.join(", ")
@@ -72,9 +72,9 @@ defmodule JIT do
     fun_type = Map.get(inf_types, :return)
 
     opencl_body =
-      OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", MapSet.new())
+      Orchestra.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", MapSet.new())
 
-    k = OCLPolyHok.OpenCLBackend.gen_function_jit(fname, param_list, opencl_body, fun_type)
+    k = Orchestra.OpenCLBackend.gen_function_jit(fname, param_list, opencl_body, fun_type)
 
     function = "\n" <> k <> "\n\n"
 
@@ -86,7 +86,7 @@ defmodule JIT do
     if MapSet.member?(compiled_funs, name) do
       {[], compiled_funs}
     else
-      nast = OCLPolyHok.load_ast(name)
+      nast = Orchestra.load_ast(name)
 
       case nast do
         nil ->
@@ -125,7 +125,7 @@ defmodule JIT do
 
           # This will generate the function body in OpenCL code
           opencl_body =
-            OCLPolyHok.OpenCLBackend.gen_ocl_jit(
+            Orchestra.OpenCLBackend.gen_ocl_jit(
               body,
               inf_types,
               param_vars,
@@ -134,7 +134,7 @@ defmodule JIT do
             )
 
           # This will generate the function declaration in OpenCL code
-          k = OCLPolyHok.OpenCLBackend.gen_function_jit(fname, param_list, opencl_body, fun_type)
+          k = Orchestra.OpenCLBackend.gen_function_jit(fname, param_list, opencl_body, fun_type)
 
           function = "\n" <> k <> "\n\n"
 
@@ -208,15 +208,15 @@ defmodule JIT do
       - An optional reason for the error if the inference failed.
   """
   def infer_types({:defk, _, [_header, [body]]}, delta, kernel_name) do
-    OCLPolyHok.TypeInference.type_check(delta, body, kernel_name)
+    Orchestra.TypeInference.type_check(delta, body, kernel_name)
   end
 
   def infer_types({:defd, _, [_header, [body]]}, delta, fun_name) do
-    OCLPolyHok.TypeInference.type_check(delta, body, fun_name)
+    Orchestra.TypeInference.type_check(delta, body, fun_name)
   end
 
   def infer_types({:fn, _, [{:->, _, [_para, body]}]}, delta, fun_name) do
-    OCLPolyHok.TypeInference.type_check(delta, body, fun_name)
+    Orchestra.TypeInference.type_check(delta, body, fun_name)
   end
 
   @doc """
@@ -243,9 +243,9 @@ defmodule JIT do
     IO.inspect(param_vars, label: "param_vars")
 
     opencl_body =
-      OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", subs)
+      Orchestra.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", subs)
 
-    k = OCLPolyHok.OpenCLBackend.gen_kernel_jit(fname, param_list, opencl_body)
+    k = Orchestra.OpenCLBackend.gen_kernel_jit(fname, param_list, opencl_body)
 
     "\n" <> k <> "\n\n"
   end
@@ -366,7 +366,7 @@ defmodule JIT do
     formal_para
     |> preprocess_formal_parameters()
     |> Enum.zip(inferred_types)
-    |> OCLPolyHok.TypeInference.process_atomic_parameters_delta()
+    |> Orchestra.TypeInference.process_atomic_parameters_delta()
     |> Map.new()
   end
 
@@ -415,12 +415,12 @@ defmodule JIT do
 
     fun_graph
     # discard special functions
-    |> Enum.filter(fn f -> not OCLPolyHok.TypeInference.is_special_function?(f) end)
+    |> Enum.filter(fn f -> not Orchestra.TypeInference.is_special_function?(f) end)
     # Load ast and filter function graph
     |> Enum.map(fn f ->
       # Load function ast from module server
       {ast, funs} =
-        case OCLPolyHok.load_ast(f) do
+        case Orchestra.load_ast(f) do
           nil ->
             raise "Error: function '#{f}' not found. Function may not been declared or doesn't exist."
 
@@ -430,7 +430,7 @@ defmodule JIT do
 
       # Remove special functions from the list of functions called inside the function
       funs =
-        Enum.filter(funs, fn fun -> not OCLPolyHok.TypeInference.is_special_function?(fun) end)
+        Enum.filter(funs, fn fun -> not Orchestra.TypeInference.is_special_function?(fun) end)
 
       # Return function name, its ast and function graph as a tuple
       {f, ast, funs}
@@ -449,7 +449,7 @@ defmodule JIT do
   def sort_functions_by_call_graph([]), do: []
 
   def sort_functions_by_call_graph(funs_graph_asts) do
-    OCLPolyHok.CallGraphSorter.sort(funs_graph_asts)
+    Orchestra.CallGraphSorter.sort(funs_graph_asts)
   end
 
   @doc """
@@ -598,7 +598,7 @@ defmodule JIT do
 
       _ ->
         IO.inspect(kernel, label: "Invalid kernel")
-        raise "OCLPolyHok.build: invalid kernel"
+        raise "Orchestra.build: invalid kernel"
     end
   end
 
@@ -701,7 +701,7 @@ defmodule JIT do
         {fname, _, _para} = header
 
         # Travels the function body and adds a return statement if the function returns an expression
-        body = OCLPolyHok.TypeInference.add_return(Map.put(%{}, :return, :none), body)
+        body = Orchestra.TypeInference.add_return(Map.put(%{}, :return, :none), body)
 
         # IO.inspect(body, label: "body with return added")
 

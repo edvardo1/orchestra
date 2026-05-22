@@ -1,10 +1,10 @@
-require OCLPolyHok
+require Orchestra
 
-OCLPolyHok.set_debug_logs(true)
+Orchestra.set_debug_logs(true)
 
 Nx.default_backend(Nx.BinaryBackend)
 
-OCLPolyHok.defmodule DP do
+Orchestra.defmodule DP do
   defk map_2kernel(a1, a2, a3, size, f) do
     id = get_global_id(0)
 
@@ -40,19 +40,19 @@ OCLPolyHok.defmodule DP do
   end
 
   def map2(t1, t2, func) do
-    shape = OCLPolyHok.get_shape(t1)
-    type = OCLPolyHok.get_type(t1)
+    shape = Orchestra.get_shape(t1)
+    type = Orchestra.get_type(t1)
     len = Nx.size(shape)
 
     # New empty tensor to hold the result
-    result_tensor = OCLPolyHok.tensor(shape, type)
+    result_tensor = Orchestra.tensor(shape, type)
 
     # Small sizes are a good fit for CPU execution
     # threadsPerBlock = 8
     # numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
 
-    OCLPolyHok.with OCLPolyHok.cpu() do
-      OCLPolyHok.spawn(
+    Orchestra.with Orchestra.cpu() do
+      Orchestra.spawn(
         &DP.map_2kernel/5,
         {len},
         {0},
@@ -66,14 +66,14 @@ OCLPolyHok.defmodule DP do
   def reduce(tensor, initial, f) do
     cores = 12
 
-    shape = OCLPolyHok.get_shape(tensor)
-    type = OCLPolyHok.get_type(tensor)
+    shape = Orchestra.get_shape(tensor)
+    type = Orchestra.get_type(tensor)
     len = Nx.size(shape)
 
-    result_tensor = OCLPolyHok.tensor({cores}, type, fn _i -> initial end)
+    result_tensor = Orchestra.tensor({cores}, type, fn _i -> initial end)
 
-    OCLPolyHok.with OCLPolyHok.cpu() do
-      OCLPolyHok.spawn(
+    Orchestra.with Orchestra.cpu() do
+      Orchestra.spawn(
         &DP.reduce_kernel/5,
         {cores},
         {1},
@@ -91,14 +91,14 @@ n = String.to_integer(arg)
 
 IO.puts("Using Nx backend: #{inspect(Nx.default_backend())}\n")
 
-vet1 = OCLPolyHok.tensor({n}, :f32, fn _i -> 1.0 end)
-vet2 = OCLPolyHok.tensor({n}, :f32, fn _i -> 2.0 end)
+vet1 = Orchestra.tensor({n}, :f32, fn _i -> 1.0 end)
+vet2 = Orchestra.tensor({n}, :f32, fn _i -> 2.0 end)
 
 prev = System.monotonic_time()
 
 res =
-  DP.map2(vet1, vet2, OCLPolyHok.phok(fn a, b -> a * b end))
-  |> DP.reduce(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
+  DP.map2(vet1, vet2, Orchestra.phok(fn a, b -> a * b end))
+  |> DP.reduce(0.0, Orchestra.phok(fn a, b -> a + b end))
 
 next = System.monotonic_time()
 
@@ -111,4 +111,4 @@ IO.inspect(res, label: "result tensor")
 IO.inspect(res_value, label: "Dot product result")
 IO.puts("Expected result: #{expected_value}")
 
-IO.puts("OCLPolyHok (CPU)\t#{n}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")
+IO.puts("Orchestra (CPU)\t#{n}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")

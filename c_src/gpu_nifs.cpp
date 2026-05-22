@@ -919,7 +919,7 @@ static ERL_NIF_TERM new_aligned_nx_from_list_nif(ErlNifEnv *env, int argc, const
   try
   {
     // Allocate Shared Virtual Memory (SVM) that is aligned and can be accessed by any CPU core.
-    // By default, all OCL-PolyHok's SVMs will be allocated in the CPU for CPU parallel computations.
+    // By default, all Orchestra's SVMs will be allocated in the CPU for CPU parallel computations.
     // We do not intend to use SVM for GPU computations, because we are already using cl::Buffer for this.
     void *aligned_mem = open_cl->createSVM(array_size_bytes, OCLInterface::DeviceType::CPU);
 
@@ -1051,7 +1051,7 @@ static ERL_NIF_TERM new_empty_aligned_nx_nif(ErlNifEnv *env, int argc, const ERL
   try
   {
     // Allocate Shared Virtual Memory (SVM) that is aligned and can be accessed by any CPU core.
-    // By default, all OCL-PolyHok's SVMs will be allocated in the CPU for CPU parallel computations.
+    // By default, all Orchestra's SVMs will be allocated in the CPU for CPU parallel computations.
     // We do not intend to use SVM for GPU computations, because we are already using cl::Buffer for this.
     void *aligned_mem = open_cl->createSVM(array_size_bytes, OCLInterface::DeviceType::CPU);
 
@@ -1262,4 +1262,4 @@ static ErlNifFunc nif_funcs[] = {
     {"map_nx_svm_nif", 3, map_nx_svm_nif, 0},
     {"unmap_nx_svm_nif", 1, unmap_nx_svm_nif, 0}};
 
-ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)
+ERL_NIF_INIT(Elixir.Orchestra, nif_funcs, &load, NULL, NULL, &unload)

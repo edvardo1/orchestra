@@ -1,4 +1,4 @@
-require OCLPolyHok
+require Orchestra
 
 defmodule BMP do
   @on_load :load_nifs
@@ -25,7 +25,7 @@ defmodule BMP do
   end
 end
 
-OCLPolyHok.defmodule Julia do
+Orchestra.defmodule Julia do
   defd julia(x, y, dim) do
     scale = 0.1
     jx = scale * (dim - x) / dim
@@ -71,7 +71,7 @@ OCLPolyHok.defmodule Julia do
   end
 
   def mapgen2D_step_xy_1para_noret(result_gpu, arg1, size, f) do
-    OCLPolyHok.spawn(&Julia.mapgen2D_xy_1para_noret_ker/4, {size, size, 1}, {1, 1, 1}, [
+    Orchestra.spawn(&Julia.mapgen2D_xy_1para_noret_ker/4, {size, size, 1}, {1, 1, 1}, [
       result_gpu,
       arg1,
       size,
@@ -89,15 +89,15 @@ dim = m
 
 prev = System.monotonic_time()
 
-result_gpu = OCLPolyHok.new_gnx(dim * dim, 4, {:s, 32})
+result_gpu = Orchestra.new_gnx(dim * dim, 4, {:s, 32})
 
 _image =
   result_gpu
   |> Julia.mapgen2D_step_xy_1para_noret(dim, dim, &Julia.julia_function/4)
-  |> OCLPolyHok.get_gnx()
+  |> Orchestra.get_gnx()
 
 next = System.monotonic_time()
 
-IO.puts("OCLPolyHok\t#{dim}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")
+IO.puts("Orchestra\t#{dim}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")
 
 # BMP.gen_bmp_int(~c"juliaske.bmp",dim,image)

@@ -1,8 +1,8 @@
-require OCLPolyHok
+require Orchestra
 
-# OCLPolyHok.set_debug_logs(true)
+# Orchestra.set_debug_logs(true)
 
-OCLPolyHok.defmodule MM do
+Orchestra.defmodule MM do
   defk map2xy2D_kernel(arr1, arr2, par, resp, size, f) do
     row = get_global_id(1)
     col = get_global_id(0)
@@ -25,21 +25,21 @@ OCLPolyHok.defmodule MM do
   def mm(arr1, arr2, size) do
     block_size = 16
     num_blocks = div(size + block_size - 1, block_size)
-    type = OCLPolyHok.get_type(arr1)
+    type = Orchestra.get_type(arr1)
 
-    result_nx = OCLPolyHok.with OCLPolyHok.gpu() do
-      arr1_gnx = OCLPolyHok.new_gnx(arr1)
-      arr2_gnx = OCLPolyHok.new_gnx(arr2)
-      resp_gnx = OCLPolyHok.new_gnx({size, size}, type)
+    result_nx = Orchestra.with Orchestra.gpu() do
+      arr1_gnx = Orchestra.new_gnx(arr1)
+      arr2_gnx = Orchestra.new_gnx(arr2)
+      resp_gnx = Orchestra.new_gnx({size, size}, type)
 
-      OCLPolyHok.spawn(
+      Orchestra.spawn(
         &MM.map2xy2D_kernel/6,
         {num_blocks, num_blocks, 1},
         {block_size, block_size, 1},
         [arr1_gnx, arr2_gnx, size, resp_gnx, size, &MM.mult/5]
       )
 
-      OCLPolyHok.get_gnx(resp_gnx)
+      Orchestra.get_gnx(resp_gnx)
     end
 
     result_nx
@@ -87,8 +87,8 @@ arg =
 size = String.to_integer(arg)
 
 # Generate random matrices in CPU memory
-mat1 = OCLPolyHok.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
-mat2 = OCLPolyHok.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
+mat1 = Orchestra.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
+mat2 = Orchestra.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
 
 timing_start = System.monotonic_time()
 
@@ -99,7 +99,7 @@ timing_end = System.monotonic_time()
 # Calculate times in milliseconds
 time = System.convert_time_unit(timing_end - timing_start, :native, :millisecond)
 
-IO.puts("OCLPolyHok (GPU)\t#{size}\t#{time}")
+IO.puts("Orchestra (GPU)\t#{size}\t#{time}")
 
 IO.puts("\nChecking results for 5 random positions...\n")
 CheckMM.check_spots(5, size, mat1, mat2, result)

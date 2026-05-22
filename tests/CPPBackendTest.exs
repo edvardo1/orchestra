@@ -1,4 +1,4 @@
-require OCLPolyHok
+require Orchestra
 
 IO.puts "Running CPPBackendTest"
 
@@ -8,10 +8,10 @@ result = fn ->
   nx_tensor = Nx.tensor([1, 2, 3], type: :s32)
 
   # Creating array on GPU from NX tensor in CPU memory
-  buf = OCLPolyHok.new_gnx(nx_tensor)
+  buf = Orchestra.new_gnx(nx_tensor)
 
   # Retrieving data from GPU to host
-  result = OCLPolyHok.get_gnx(buf)
+  result = Orchestra.get_gnx(buf)
 
   # Verifying the result
   IO.inspect(result, label: "Result from GPU")

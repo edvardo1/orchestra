@@ -1,10 +1,10 @@
-require OCLPolyHok
+require Orchestra
 
-# OCLPolyHok.set_debug_logs(true)
+# Orchestra.set_debug_logs(true)
 
 Nx.default_backend(Nx.BinaryBackend)
 
-OCLPolyHok.defmodule Reduce do
+Orchestra.defmodule Reduce do
   include(CAS_Poly)
 
   # This reduce kernel was rewritten to better perform in CPU
@@ -73,14 +73,14 @@ OCLPolyHok.defmodule Reduce do
   def reduce(tensor, initial, f) do
     cores = 12
 
-    shape = OCLPolyHok.get_shape(tensor)
-    type = OCLPolyHok.get_type(tensor)
+    shape = Orchestra.get_shape(tensor)
+    type = Orchestra.get_type(tensor)
     len = Nx.size(shape)
 
-    result_tensor = OCLPolyHok.tensor({cores}, type, fn _i -> initial end)
+    result_tensor = Orchestra.tensor({cores}, type, fn _i -> initial end)
 
-    OCLPolyHok.with OCLPolyHok.cpu() do
-      OCLPolyHok.spawn(
+    Orchestra.with Orchestra.cpu() do
+      Orchestra.spawn(
         &Reduce.reduce_kernel/5,
         {cores},
         {1},
@@ -92,17 +92,17 @@ OCLPolyHok.defmodule Reduce do
   end
 
   def reduce_2(tensor, initial, f) do
-    shape = OCLPolyHok.get_shape(tensor)
-    type = OCLPolyHok.get_type(tensor)
+    shape = Orchestra.get_shape(tensor)
+    type = Orchestra.get_type(tensor)
     len = Nx.size(shape)
 
     threadsPerBlock = 8
     blocksPerGrid = div(len + threadsPerBlock - 1, threadsPerBlock)
 
-    result_tensor = OCLPolyHok.tensor([initial], type)
+    result_tensor = Orchestra.tensor([initial], type)
 
-    OCLPolyHok.with OCLPolyHok.cpu() do
-      OCLPolyHok.spawn(
+    Orchestra.with Orchestra.cpu() do
+      Orchestra.spawn(
         &Reduce.reduce_kernel_gpu/5,
         {blocksPerGrid},
         {threadsPerBlock},
@@ -134,7 +134,7 @@ t =
 
 IO.puts("Using Nx backend: #{inspect(Nx.default_backend())}\n")
 
-vet1 = OCLPolyHok.tensor({n}, :f32, fn _i -> 1.0 end)
+vet1 = Orchestra.tensor({n}, :f32, fn _i -> 1.0 end)
 
 IO.puts("Starting reduction...\n")
 
@@ -142,14 +142,14 @@ IO.puts("Starting reduction...\n")
   case t do
     :optimized ->
       prev = System.monotonic_time()
-      reduce_optimized = vet1 |> Reduce.reduce(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
+      reduce_optimized = vet1 |> Reduce.reduce(0.0, Orchestra.phok(fn a, b -> a + b end))
       next = System.monotonic_time()
       time = System.convert_time_unit(next - prev, :native, :millisecond)
       {reduce_optimized, time}
 
     :gpu ->
       prev = System.monotonic_time()
-      reduce_gpu = vet1 |> Reduce.reduce_2(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
+      reduce_gpu = vet1 |> Reduce.reduce_2(0.0, Orchestra.phok(fn a, b -> a + b end))
       next = System.monotonic_time()
       time = System.convert_time_unit(next - prev, :native, :millisecond)
       {reduce_gpu, time}

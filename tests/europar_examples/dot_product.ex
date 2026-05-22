@@ -1,7 +1,7 @@
-require OCLPolyHok
+require Orchestra
 #Nx.default_backend(EXLA.Backend)
 #import Nx
-OCLPolyHok.defmodule Ske do
+Orchestra.defmodule Ske do
 include CAS_Poly
   defk map_2kernel(a1,a2,a3,size,f) do
     id = blockIdx.x * blockDim.x + threadIdx.x
@@ -11,30 +11,30 @@ include CAS_Poly
   end
   def map2(t1,t2,func) do
 
-    {l,c} = OCLPolyHok.get_shape_gnx(t1)
-    type = OCLPolyHok.get_type_gnx(t2)
+    {l,c} = Orchestra.get_shape_gnx(t1)
+    type = Orchestra.get_type_gnx(t2)
      size = l*c
-     result_gpu = OCLPolyHok.new_gnx(l,c, type)
+     result_gpu = Orchestra.new_gnx(l,c, type)
 
       threadsPerBlock = 256;
       numberOfBlocks = div(size + threadsPerBlock - 1, threadsPerBlock)
 
-      OCLPolyHok.spawn(&Ske.map_2kernel/5,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[t1,t2,result_gpu,size,func])
+      Orchestra.spawn(&Ske.map_2kernel/5,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[t1,t2,result_gpu,size,func])
 
 
       result_gpu
   end
   def reduce(ref, initial, f) do
 
-     {l,c} = OCLPolyHok.get_shape_gnx(ref)
-     type = OCLPolyHok.get_type_gnx(ref)
+     {l,c} = Orchestra.get_shape_gnx(ref)
+     type = Orchestra.get_type_gnx(ref)
      size = l*c
-      result_gpu  = OCLPolyHok.new_gnx(Nx.tensor([[initial]] , type: type))
+      result_gpu  = Orchestra.new_gnx(Nx.tensor([[initial]] , type: type))
 
       threadsPerBlock = 256
       blocksPerGrid = div(size + threadsPerBlock - 1, threadsPerBlock)
       numberOfBlocks = blocksPerGrid
-      OCLPolyHok.spawn(&Ske.reduce_kernel/4,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, f, size])
+      Orchestra.spawn(&Ske.reduce_kernel/4,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, f, size])
       result_gpu
   end
   defk reduce_kernel(a,  ref4, f,n) do
@@ -75,10 +75,10 @@ include CAS_Poly
  end
   def dot_product(arr1,arr2) do
     arr1
-    |> OCLPolyHok.new_gnx
-    |> Ske.map2(OCLPolyHok.new_gnx(arr2), OCLPolyHok.phok fn (a,b)->a * b end)
-    |> Ske.reduce(0, OCLPolyHok.phok fn (a,b)->a + b end)
-    |> OCLPolyHok.get_gnx
+    |> Orchestra.new_gnx
+    |> Ske.map2(Orchestra.new_gnx(arr2), Orchestra.phok fn (a,b)->a * b end)
+    |> Ske.reduce(0, Orchestra.phok fn (a,b)->a + b end)
+    |> Orchestra.get_gnx
    end
    def replicate(n, x), do: (for _ <- 1..n, do: x)
 end

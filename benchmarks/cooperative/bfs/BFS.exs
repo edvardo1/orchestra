@@ -1,4 +1,4 @@
-require OCLPolyHok
+require Orchestra
 
 defmodule CsrReader do
   @header_regex ~r/^(?<n1>\d+)\s+(?<n2>\d+)\s+(?<n3>\d+)$/
@@ -101,8 +101,8 @@ defmodule CsrReader do
     %{
       total_nodes: final_map.total_nodes,
       total_edges: final_map.total_edges,
-      nodes: OCLPolyHok.tensor(nodes_rev, :s32),
-      edges: OCLPolyHok.tensor(edges_rev, :s32)
+      nodes: Orchestra.tensor(nodes_rev, :s32),
+      edges: Orchestra.tensor(edges_rev, :s32)
     }
   end
 end
@@ -116,7 +116,7 @@ stop = System.monotonic_time()
 IO.inspect(graph_map)
 IO.puts("Time taken: #{System.convert_time_unit(stop - start, :native, :millisecond)}")
 
-OCLPolyHok.defmodule BFS do
+Orchestra.defmodule BFS do
   defk cpu_bfs_kernel(nodes, n_nodes, edges, n_edges, frontier, frontier_size, new_frontier, next_slot, visited) do
     tid = get_global_id(0)
 
@@ -146,6 +146,6 @@ end
 nodes_to_visit = 1
 
 # Frontier queue and visited array
-frontier = OCLPolyHok.tensor({graph_map.total_nodes}, :s32)
-new_frontier = OCLPolyHok.tensor({graph_map.total_nodes}, :s32)
-visited = OCLPolyHok.tensor({graph_map.total_nodes}, :s32, fn _ -> 0 end)
+frontier = Orchestra.tensor({graph_map.total_nodes}, :s32)
+new_frontier = Orchestra.tensor({graph_map.total_nodes}, :s32)
+visited = Orchestra.tensor({graph_map.total_nodes}, :s32, fn _ -> 0 end)

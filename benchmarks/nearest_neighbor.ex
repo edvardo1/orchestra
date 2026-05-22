@@ -1,5 +1,5 @@
 require Integer
-require OCLPolyHok
+require Orchestra
 
 defmodule DataSet do
   def open_data_set(file) do
@@ -93,7 +93,7 @@ defmodule DataSet do
   end
 end
 
-OCLPolyHok.defmodule NN do
+Orchestra.defmodule NN do
   include(CAS_Poly)
   def euclid_seq(l, lat, lng), do: euclid_seq_(l, lat, lng, [])
 
@@ -107,16 +107,16 @@ OCLPolyHok.defmodule NN do
   end
 
   def reduce(ref, acc, f) do
-    {l, c} = OCLPolyHok.get_shape_gnx(ref)
-    type = OCLPolyHok.get_type_gnx(ref)
+    {l, c} = Orchestra.get_shape_gnx(ref)
+    type = Orchestra.get_type_gnx(ref)
     size = l * c
-    result_gpu = OCLPolyHok.new_gnx(Nx.tensor([[acc]], type: type))
+    result_gpu = Orchestra.new_gnx(Nx.tensor([[acc]], type: type))
 
     threadsPerBlock = 256
     blocksPerGrid = div(size + threadsPerBlock - 1, threadsPerBlock)
     numberOfBlocks = blocksPerGrid
 
-    OCLPolyHok.spawn(&NN.reduce_kernel/4, {numberOfBlocks, 1, 1}, {threadsPerBlock, 1, 1}, [
+    Orchestra.spawn(&NN.reduce_kernel/4, {numberOfBlocks, 1, 1}, {threadsPerBlock, 1, 1}, [
       ref,
       result_gpu,
       f,
@@ -172,11 +172,11 @@ OCLPolyHok.defmodule NN do
   end
 
   def map_step_2para_1resp(d_array, step, par1, par2, size, f) do
-    type = OCLPolyHok.get_type_gnx(d_array)
+    type = Orchestra.get_type_gnx(d_array)
 
-    distances_device = OCLPolyHok.new_gnx(1, size, type)
+    distances_device = Orchestra.new_gnx(1, size, type)
 
-    OCLPolyHok.spawn(&NN.map_step_2para_1resp_kernel/7, {size, 1, 1}, {1, 1, 1}, [
+    Orchestra.spawn(&NN.map_step_2para_1resp_kernel/7, {size, 1, 1}, {1, 1, 1}, [
       d_array,
       distances_device,
       step,
@@ -215,11 +215,11 @@ data_set_host = DataSet.gen_data_set_nx_double(size)
 prev = System.monotonic_time()
 
 _r =
-  OCLPolyHok.new_gnx(data_set_host)
+  Orchestra.new_gnx(data_set_host)
   |> NN.map_step_2para_1resp(2, 0.0, 0.0, size, &NN.euclid/3)
   |> NN.reduce(50000.0, &NN.menor/2)
-  |> OCLPolyHok.get_gnx()
+  |> Orchestra.get_gnx()
 
 next = System.monotonic_time()
 
-IO.puts("OCLPolyHok\t#{size}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")
+IO.puts("Orchestra\t#{size}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")

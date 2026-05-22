@@ -1,6 +1,6 @@
-require OCLPolyHok
+require Orchestra
 
-OCLPolyHok.defmodule NBodies do
+Orchestra.defmodule NBodies do
 
   defk gpu_nBodies(p,dt,n,softening) do
     i = blockDim.x * blockIdx.x + threadIdx.x
@@ -113,22 +113,22 @@ size_body = 6
 size_array = size_body * nBodies
 
 
-#h_buf = OCLPolyHok.new_nx_from_function(1,size_array,{:f,32},fn -> :rand.uniform() end )
+#h_buf = Orchestra.new_nx_from_function(1,size_array,{:f,32},fn -> :rand.uniform() end )
 
-h_buf = OCLPolyHok.new_nx_from_function(1,size_array,{:f,32},fn -> 1 end )
+h_buf = Orchestra.new_nx_from_function(1,size_array,{:f,32},fn -> 1 end )
 
 prev = System.monotonic_time()
 
-d_buf = OCLPolyHok.new_gnx(h_buf)
+d_buf = Orchestra.new_gnx(h_buf)
 
 
-OCLPolyHok.spawn_jit(&NBodies.gpu_nBodies/4,{nBlocks,1,1},{block_size,1,1},[d_buf,dt,nBodies,softening])
+Orchestra.spawn_jit(&NBodies.gpu_nBodies/4,{nBlocks,1,1},{block_size,1,1},[d_buf,dt,nBodies,softening])
 
-OCLPolyHok.spawn_jit(&Integrate.gpu_integrate/3,{nBlocks,1,1},{block_size,1,1},[d_buf,dt,nBodies])
-_gpu_resp = OCLPolyHok.get_gnx(d_buf)
+Orchestra.spawn_jit(&Integrate.gpu_integrate/3,{nBlocks,1,1},{block_size,1,1},[d_buf,dt,nBodies])
+_gpu_resp = Orchestra.get_gnx(d_buf)
 next = System.monotonic_time()
 
-IO.puts "OCLPolyHok\t#{user_value}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
+IO.puts "Orchestra\t#{user_value}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
 
 #IO.inspect gpu_resp
 

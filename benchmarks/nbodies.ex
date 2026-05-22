@@ -1,6 +1,6 @@
-require OCLPolyHok
+require Orchestra
 
-OCLPolyHok.defmodule NBodies do
+Orchestra.defmodule NBodies do
   defd gpu_nBodies(p, c, n) do
     softening = 0.000000001
     dt = 0.01
@@ -43,10 +43,10 @@ OCLPolyHok.defmodule NBodies do
 
   def map_2_para_no_resp(d_array, par1, par2, size, f) do
     block_size = 128
-    {_l, step} = OCLPolyHok.get_shape_gnx(d_array)
+    {_l, step} = Orchestra.get_shape_gnx(d_array)
     nBlocks = floor((size + block_size - 1) / block_size)
 
-    OCLPolyHok.spawn(
+    Orchestra.spawn(
       &NBodies.map_step_2_para_no_resp_kernel/6,
       {nBlocks, 1, 1},
       {block_size, 1, 1},
@@ -129,20 +129,20 @@ user_value = String.to_integer(arg)
 nBodies = user_value
 size_body = 6
 
-h_buf = OCLPolyHok.new_nx_from_function(nBodies, size_body, {:f, 64}, fn -> :rand.uniform() end)
+h_buf = Orchestra.new_nx_from_function(nBodies, size_body, {:f, 64}, fn -> :rand.uniform() end)
 
 prev = System.monotonic_time()
 
-d_buf = OCLPolyHok.new_gnx(h_buf)
+d_buf = Orchestra.new_gnx(h_buf)
 
 _gpu_resp =
   d_buf
   |> NBodies.map_2_para_no_resp(d_buf, nBodies, nBodies, &NBodies.gpu_nBodies/3)
   |> NBodies.map_2_para_no_resp(0.01, nBodies, nBodies, &NBodies.gpu_integrate/3)
-  |> OCLPolyHok.get_gnx()
+  |> Orchestra.get_gnx()
 
 next = System.monotonic_time()
 
 IO.puts(
-  "OCLPolyHok\t#{user_value}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}"
+  "Orchestra\t#{user_value}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}"
 )

@@ -1,4 +1,4 @@
-defmodule OCLPolyHok.Context do
+defmodule Orchestra.Context do
   @enforce_keys [:device]
   defstruct [:device]
 end

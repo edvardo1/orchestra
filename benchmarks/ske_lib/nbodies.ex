@@ -1,6 +1,6 @@
-require OCLPolyHok
+require Orchestra
 
-OCLPolyHok.defmodule NBodies do
+Orchestra.defmodule NBodies do
 
   defd gpu_nBodies(p,c,n) do
     softening = 0.000000001
@@ -44,19 +44,19 @@ user_value = String.to_integer(arg)
 nBodies = user_value #3000;
 size_body = 6
 
-h_buf = OCLPolyHok.new_nx_from_function(nBodies,size_body,{:f,64},fn -> :rand.uniform() end )
+h_buf = Orchestra.new_nx_from_function(nBodies,size_body,{:f,64},fn -> :rand.uniform() end )
 prev = System.monotonic_time()
 
-d_buf = OCLPolyHok.new_gnx(h_buf)
+d_buf = Orchestra.new_gnx(h_buf)
 
 _gpu_resp = d_buf
   |> Ske.map(&NBodies.gpu_nBodies/3, [d_buf,nBodies], return: false)
   |> Ske.map(&NBodies.gpu_integrate/3, [0.01,nBodies], return: false)
-  |> OCLPolyHok.get_gnx
+  |> Orchestra.get_gnx
   #|> IO.inspect
 
   next = System.monotonic_time()
 
-IO.puts "OCLPolyHok\t#{user_value}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
+IO.puts "Orchestra\t#{user_value}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
 
 #IO.inspect gpu_resp

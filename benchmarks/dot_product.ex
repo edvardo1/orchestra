@@ -1,7 +1,7 @@
-require OCLPolyHok
+require Orchestra
 require Integer
 
-OCLPolyHok.defmodule DP do
+Orchestra.defmodule DP do
   include(CAS_Poly)
 
   defk map_2kernel(a1, a2, a3, size, f) do
@@ -13,15 +13,15 @@ OCLPolyHok.defmodule DP do
   end
 
   def map2(t1, t2, func) do
-    {l, c} = OCLPolyHok.get_shape_gnx(t1)
-    type = OCLPolyHok.get_type_gnx(t2)
+    {l, c} = Orchestra.get_shape_gnx(t1)
+    type = Orchestra.get_type_gnx(t2)
     size = l * c
-    result_gpu = OCLPolyHok.new_gnx(l, c, type)
+    result_gpu = Orchestra.new_gnx(l, c, type)
 
     threadsPerBlock = 256
     numberOfBlocks = div(size + threadsPerBlock - 1, threadsPerBlock)
 
-    OCLPolyHok.spawn(&DP.map_2kernel/5, {numberOfBlocks, 1, 1}, {threadsPerBlock, 1, 1}, [
+    Orchestra.spawn(&DP.map_2kernel/5, {numberOfBlocks, 1, 1}, {threadsPerBlock, 1, 1}, [
       t1,
       t2,
       result_gpu,
@@ -33,16 +33,16 @@ OCLPolyHok.defmodule DP do
   end
 
   def reduce(ref, initial, f) do
-    {l, c} = OCLPolyHok.get_shape_gnx(ref)
-    type = OCLPolyHok.get_type_gnx(ref)
+    {l, c} = Orchestra.get_shape_gnx(ref)
+    type = Orchestra.get_type_gnx(ref)
     size = l * c
-    result_gpu = OCLPolyHok.new_gnx(Nx.tensor([[initial]], type: type))
+    result_gpu = Orchestra.new_gnx(Nx.tensor([[initial]], type: type))
 
     threadsPerBlock = 256
     blocksPerGrid = div(size + threadsPerBlock - 1, threadsPerBlock)
     numberOfBlocks = blocksPerGrid
 
-    OCLPolyHok.spawn(&DP.reduce_kernel/5, {numberOfBlocks, 1, 1}, {threadsPerBlock, 1, 1}, [
+    Orchestra.spawn(&DP.reduce_kernel/5, {numberOfBlocks, 1, 1}, {threadsPerBlock, 1, 1}, [
       ref,
       result_gpu,
       initial,
@@ -146,15 +146,15 @@ vet2 = DP.new_dataset_nx_b(n)
 
 prev = System.monotonic_time()
 
-ref1 = OCLPolyHok.new_gnx(vet1)
-ref2 = OCLPolyHok.new_gnx(vet2)
+ref1 = Orchestra.new_gnx(vet1)
+ref2 = Orchestra.new_gnx(vet2)
 
 _result =
   ref1
-  |> DP.map2(ref2, OCLPolyHok.phok(fn a, b -> a * b end))
-  |> DP.reduce(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
-  |> OCLPolyHok.get_gnx()
+  |> DP.map2(ref2, Orchestra.phok(fn a, b -> a * b end))
+  |> DP.reduce(0.0, Orchestra.phok(fn a, b -> a + b end))
+  |> Orchestra.get_gnx()
 
 next = System.monotonic_time()
 
-IO.puts("OCLPolyHok\t#{n}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")
+IO.puts("Orchestra\t#{n}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")

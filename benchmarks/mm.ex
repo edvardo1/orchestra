@@ -1,8 +1,8 @@
-require OCLPolyHok
+require Orchestra
 
-# OCLPolyHok.set_debug_logs(true)
+# Orchestra.set_debug_logs(true)
 
-OCLPolyHok.defmodule MM do
+Orchestra.defmodule MM do
   defk map2xy2D_kernel(arr1, arr2, par, resp, size, f) do
     row = blockIdx.y * blockDim.y + threadIdx.y
     col = blockIdx.x * blockDim.x + threadIdx.x
@@ -17,7 +17,7 @@ OCLPolyHok.defmodule MM do
     grid_rows = trunc((size + block_size - 1) / block_size)
     grid_cols = trunc((size + block_size - 1) / block_size)
 
-    OCLPolyHok.spawn(
+    Orchestra.spawn(
       &MM.map2xy2D_kernel/6,
       {grid_cols, grid_rows, 1},
       {block_size, block_size, 1},
@@ -26,13 +26,13 @@ OCLPolyHok.defmodule MM do
   end
 
   def comp2xy2D1p(arr1, arr2, par, size1, size2, f) do
-    result_gpu = OCLPolyHok.new_gnx(size1, size2, OCLPolyHok.get_type(arr1))
-    arr1_gpu = OCLPolyHok.new_gnx(arr1)
-    arr2_gpu = OCLPolyHok.new_gnx(arr2)
+    result_gpu = Orchestra.new_gnx(size1, size2, Orchestra.get_type(arr1))
+    arr1_gpu = Orchestra.new_gnx(arr1)
+    arr2_gpu = Orchestra.new_gnx(arr2)
 
     MM.map2xy2D1p(arr1_gpu, arr2_gpu, par, result_gpu, size1, f)
 
-    r_gpu = OCLPolyHok.get_gnx(result_gpu)
+    r_gpu = Orchestra.get_gnx(result_gpu)
     r_gpu
   end
 end
@@ -78,13 +78,13 @@ size =
 
 m = String.to_integer(size)
 
-mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+mat1 = Orchestra.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+mat2 = Orchestra.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 
 timing_start = System.monotonic_time()
 
 _result =
-  OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
+  Orchestra.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
     # Fix: this must start with 0.0 to be identified as float, otherwise results are truncated
     sum = 0.0
 
@@ -100,4 +100,4 @@ timing_end = System.monotonic_time()
 # Calculate times in milliseconds
 time = System.convert_time_unit(timing_end - timing_start, :native, :millisecond)
 
-IO.puts("OCLPolyHok\t#{m}\t#{time}")
+IO.puts("Orchestra\t#{m}\t#{time}")

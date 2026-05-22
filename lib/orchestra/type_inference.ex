@@ -1,6 +1,6 @@
 require OrchestraFunctions
 
-defmodule OCLPolyHok.TypeInference do
+defmodule Orchestra.TypeInference do
   def set_debug_logs(value) do
     Agent.update(:type_inference_debug_logs_agent, fn _old -> value end)
   end

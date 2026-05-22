@@ -1,4 +1,4 @@
-defmodule OCLPolyHok do
+defmodule Orchestra do
   @on_load :load_nifs
 
   # This function is a @on_load callback that is called when the module is loaded.
@@ -34,8 +34,8 @@ defmodule OCLPolyHok do
   # generates a unique name for the function, and returns a tuple containing the function type (:anon),
   # name, and the function itself.
   defmacro phok({:fn, aa, [{:->, bb, [para, body]}]}) do
-    body = OCLPolyHok.OpenCLBackend.add_return(body)
-    name = "anon_" <> OCLPolyHok.OpenCLBackend.gen_lambda_name()
+    body = Orchestra.OpenCLBackend.add_return(body)
+    name = "anon_" <> Orchestra.OpenCLBackend.gen_lambda_name()
     function = {:fn, aa, [{:->, bb, [para, body]}]}
     resp = quote(do: {:anon, unquote(name), unquote(Macro.escape(function))})
     resp
@@ -43,9 +43,9 @@ defmodule OCLPolyHok do
 
   defmacro gpu_for({:<-, _, [var, tensor]}, do: b) do
     quote do:
-            OCLPolyHok.new_gnx(unquote(tensor))
-            |> PMap.map(OCLPolyHok.phok(fn unquote(var) -> unquote(b) end))
-            |> OCLPolyHok.get_gnx()
+            Orchestra.new_gnx(unquote(tensor))
+            |> PMap.map(Orchestra.phok(fn unquote(var) -> unquote(b) end))
+            |> Orchestra.get_gnx()
   end
 
   defmacro gpu_for({:<-, _, [var1, {:.., _, [_b1, e1]}]}, arr1, arr2, do: body) do
@@ -55,7 +55,7 @@ defmodule OCLPolyHok do
                 unquote(arr1),
                 unquote(arr2),
                 unquote(e1),
-                OCLPolyHok.phok(fn unquote(arr1), unquote(arr2), unquote(var1) ->
+                Orchestra.phok(fn unquote(arr1), unquote(arr2), unquote(var1) ->
                   unquote(body)
                 end)
               )
@@ -64,7 +64,7 @@ defmodule OCLPolyHok do
   end
 
   defmacro gpufor({:<-, _, [var, tensor]}, do: b) do
-    quote do: Comp.comp(unquote(tensor), OCLPolyHok.phok(fn unquote(var) -> unquote(b) end))
+    quote do: Comp.comp(unquote(tensor), Orchestra.phok(fn unquote(var) -> unquote(b) end))
   end
 
   defmacro gpufor({:<-, _, [var1, {:.., _, [_b1, e1]}]}, arr1, arr2, do: body) do
@@ -74,7 +74,7 @@ defmodule OCLPolyHok do
                 unquote(arr1),
                 unquote(arr2),
                 unquote(e1),
-                OCLPolyHok.phok(fn unquote(arr1), unquote(arr2), unquote(var1) ->
+                Orchestra.phok(fn unquote(arr1), unquote(arr2), unquote(var1) ->
                   unquote(body)
                 end)
               )
@@ -98,7 +98,7 @@ defmodule OCLPolyHok do
                 unquote(par3),
                 unquote(e1),
                 unquote(e2),
-                OCLPolyHok.phok(fn unquote(arr1),
+                Orchestra.phok(fn unquote(arr1),
                                    unquote(arr2),
                                    unquote(par3),
                                    unquote(var1),
@@ -110,7 +110,7 @@ defmodule OCLPolyHok do
     r
   end
 
-  # This is the defmodule macro that defines a new OCLPolyHok module.
+  # This is the defmodule macro that defines a new Orchestra module.
   # This macro basicallly processes the module header and body internally, and generates a new module
   # wich replaces the kernels and device functions with exceptions (you can only execute kernels with 'spawn').
   defmacro defmodule(header, do: body) do
@@ -122,7 +122,7 @@ defmodule OCLPolyHok do
 
     # The new module that will be genearated here will throw exceptions when a kernel or device
     # function is called directly without using the 'spawn' function.
-    ast_new_module = OCLPolyHok.OpenCLBackend.gen_new_module(header, body)
+    ast_new_module = Orchestra.OpenCLBackend.gen_new_module(header, body)
     ast_new_module
   end
 
@@ -160,9 +160,9 @@ defmodule OCLPolyHok do
   defp process_with_exp(exp, ctx) do
     new_exp =
       case exp do
-        {{:., _, [{:__aliases__, _, [:OCLPolyHok]}, fun_name]}, _, args} ->
+        {{:., _, [{:__aliases__, _, [:Orchestra]}, fun_name]}, _, args} ->
           # IO.inspect({fun_name, args}, label: "Processing function")
-          {{:., [], [{:__aliases__, [], [:OCLPolyHok]}, fun_name]}, [], [ctx | args]}
+          {{:., [], [{:__aliases__, [], [:Orchestra]}, fun_name]}, [], [ctx | args]}
 
         _ ->
           exp
@@ -173,7 +173,7 @@ defmodule OCLPolyHok do
 
   # ----------------- Synchronize function -----------------
 
-  def synchronize(%OCLPolyHok.Context{device: d}) do
+  def synchronize(%Orchestra.Context{device: d}) do
     synchronize_nif(d)
   end
 
@@ -200,11 +200,11 @@ defmodule OCLPolyHok do
 
   # ===== Context Initializers -- based on MONAD pattern =====
   def cpu() do
-    %OCLPolyHok.Context{device: :cpu}
+    %Orchestra.Context{device: :cpu}
   end
 
   def gpu() do
-    %OCLPolyHok.Context{device: :gpu}
+    %Orchestra.Context{device: :gpu}
   end
 
   # ------- Helper functions for Nx and GNx creation -------
@@ -213,7 +213,7 @@ defmodule OCLPolyHok do
       t when t in [{:f, 32}, :f32] -> Kernel.to_charlist("float")
       t when t in [{:f, 64}, :f64] -> Kernel.to_charlist("double")
       t when t in [{:s, 32}, :s32] -> Kernel.to_charlist("int")
-      x -> raise "OCLPolyHok: type #{inspect(x)} is not suported"
+      x -> raise "Orchestra: type #{inspect(x)} is not suported"
     end
   end
 
@@ -250,7 +250,7 @@ defmodule OCLPolyHok do
 
   # == New from nx tensor
   def new_gnx(
-        %OCLPolyHok.Context{} = ctx,
+        %Orchestra.Context{} = ctx,
         %Nx.Tensor{
           data: data,
           type: type,
@@ -266,7 +266,7 @@ defmodule OCLPolyHok do
   end
 
   # == New empty gnx
-  def new_gnx(%OCLPolyHok.Context{} = ctx, shape, type) do
+  def new_gnx(%Orchestra.Context{} = ctx, shape, type) do
     gnx = new_gnx_empty(shape, type, ctx.device)
 
     {gnx, ctx}
@@ -274,8 +274,8 @@ defmodule OCLPolyHok do
 
   # ------- Function to retrieve device arrays (gnx) back to Elixir -------
   def get_gnx(
-        %OCLPolyHok.Context{} = ctx,
-        {{:nx, type, shape, name, gnx_ref}, %OCLPolyHok.Context{} = gnx_ctx}
+        %Orchestra.Context{} = ctx,
+        {{:nx, type, shape, name, gnx_ref}, %Orchestra.Context{} = gnx_ctx}
       ) do
     cond do
       gnx_ctx.device == ctx.device ->
@@ -309,7 +309,7 @@ defmodule OCLPolyHok do
 
     cond do
       tuple_size(shape) > 3 ->
-        raise "OCLPolyHok.tensor/2: OCL-PolyHok only supports tensors with up to 3 dimensions, but got a tensor with shape #{inspect(shape)}"
+        raise "Orchestra.tensor/2: Orchestra only supports tensors with up to 3 dimensions, but got a tensor with shape #{inspect(shape)}"
 
       true ->
         :ok
@@ -346,7 +346,7 @@ defmodule OCLPolyHok do
           l * c * d
 
         _ ->
-          raise "OCLPolyHok.tensor/2: shape must be a tuple of 1, 2 or 3 dimensions, but got #{inspect(shape)}"
+          raise "Orchestra.tensor/2: shape must be a tuple of 1, 2 or 3 dimensions, but got #{inspect(shape)}"
       end
 
     t_charlist = get_type_charlist(type)
@@ -359,10 +359,10 @@ defmodule OCLPolyHok do
     do: tensor(shape, t, f)
 
   # == tensor/3 clauses
-  def tensor(%OCLPolyHok.Context{} = ctx, list, type: t) when is_list(list),
+  def tensor(%Orchestra.Context{} = ctx, list, type: t) when is_list(list),
     do: tensor(ctx, list, t)
 
-  def tensor(%OCLPolyHok.Context{} = ctx, list, type) when is_list(list) do
+  def tensor(%Orchestra.Context{} = ctx, list, type) when is_list(list) do
     cond do
       ctx.device == :cpu ->
         tensor(list, type)
@@ -390,7 +390,7 @@ defmodule OCLPolyHok do
           l * c * d
 
         _ ->
-          raise "OCLPolyHok.tensor/3: shape must be a tuple of 1, 2 or 3 dimensions, but got #{inspect(shape)}"
+          raise "Orchestra.tensor/3: shape must be a tuple of 1, 2 or 3 dimensions, but got #{inspect(shape)}"
       end
 
     list = gen_list_from_function([], array_len, fun)
@@ -400,12 +400,12 @@ defmodule OCLPolyHok do
     Nx.from_binary(binary, type) |> Nx.reshape(shape)
   end
 
-  def tensor(%OCLPolyHok.Context{} = ctx, shape, type: t, fun: f)
+  def tensor(%Orchestra.Context{} = ctx, shape, type: t, fun: f)
       when is_tuple(shape) and is_function(f),
       do: tensor(ctx, shape, t, f)
 
   # == tensor/4 clauses
-  def tensor(%OCLPolyHok.Context{} = ctx, shape, type, fun)
+  def tensor(%Orchestra.Context{} = ctx, shape, type, fun)
       when is_tuple(shape) and is_function(fun) do
     cond do
       ctx.device == :cpu ->
@@ -425,10 +425,10 @@ defmodule OCLPolyHok do
 
   # -- Helpers for generating tensor from function --
 
-  # == Check function arity and return type for OCLPolyHok.tensor/3
+  # == Check function arity and return type for Orchestra.tensor/3
   defp validate_function(fun, type_charlist) when is_function(fun) do
     if not is_function(fun, 1) do
-      raise "OCLPolyHok.tensor/3: the provided function must receive exactly 1 argument (the current element index), but the provided function has arity #{:erlang.fun_info(fun)[:arity]}"
+      raise "Orchestra.tensor/3: the provided function must receive exactly 1 argument (the current element index), but the provided function has arity #{:erlang.fun_info(fun)[:arity]}"
     end
 
     fun_type =
@@ -440,7 +440,7 @@ defmodule OCLPolyHok do
           :integer
 
         x ->
-          raise "OCLPolyHok.tensor/3: the provided function must return either float or integer values, but it returned a value of type '#{inspect(x)}'"
+          raise "Orchestra.tensor/3: the provided function must return either float or integer values, but it returned a value of type '#{inspect(x)}'"
       end
 
     cond do
@@ -451,7 +451,7 @@ defmodule OCLPolyHok do
         :ok
 
       true ->
-        raise "OCLPolyHok.tensor/3: the return type of the provided function is '#{fun_type}' and the type of the tensor to be created is '#{type_charlist}'"
+        raise "Orchestra.tensor/3: the return type of the provided function is '#{fun_type}' and the type of the tensor to be created is '#{type_charlist}'"
     end
   end
 
@@ -757,13 +757,13 @@ defmodule OCLPolyHok do
 
   ## Parameters
 
-    - `ctx`: The OCLPolyHok context containing the device information.
+    - `ctx`: The Orchestra context containing the device information.
     - `k`: The kernel function to be compiled and executed.
     - `b`: A tuple containing the number of blocks on each dimension (x, y, z), a.k.a grid size.
     - `t`: A tuple containing the blocks size on each dimension (x, y, z), a.k.a thread group size.
     - `l`: A list of arguments to be passed to the kernel.
   """
-  def spawn(%OCLPolyHok.Context{} = ctx, k, b, t, l) do
+  def spawn(%Orchestra.Context{} = ctx, k, b, t, l) do
     # Process the kernel arguments based on the device context.
     l =
       cond do
@@ -786,7 +786,7 @@ defmodule OCLPolyHok do
         nil -> raise "Unknown kernel #{inspect(kernel_name)}"
       end
 
-    OCLPolyHok.TypeInference.set_debug_logs(true)
+    Orchestra.TypeInference.set_debug_logs(true)
 
     # Generates a map called 'delta' that maps the formal parameters of the kernel to the inferred types
     # of the actual parameters provided to the kernel (contained in the list `l`).
@@ -832,7 +832,7 @@ defmodule OCLPolyHok do
 
     # If double precision is used, check if the device supports it.
     if contains_double and not double_supported_nif(ctx.device) do
-      raise "[OCL-PolyHok] Your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
+      raise "[Orchestra] Your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
     end
 
     # Returns a map of formal parameters that are functions and their actual names in OpenCL code.

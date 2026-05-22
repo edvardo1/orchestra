@@ -6,8 +6,8 @@ n = String.to_integer(arg)
 
 IO.puts("Using Nx backend: #{inspect(Nx.default_backend())}\n")
 
-vet1 = OCLPolyHok.tensor({n}, :f32, fn _i -> 1.0 end)
-vet2 = OCLPolyHok.tensor({n}, :f32, fn _i -> 2.0 end)
+vet1 = Orchestra.tensor({n}, :f32, fn _i -> 1.0 end)
+vet2 = Orchestra.tensor({n}, :f32, fn _i -> 2.0 end)
 
 prev = System.monotonic_time()
 
@@ -16,7 +16,7 @@ res = Nx.dot(vet1, vet2)
 next = System.monotonic_time()
 
 res_value = res |> Nx.to_number()
-res_type = OCLPolyHok.get_type(res)
+res_type = Orchestra.get_type(res)
 expected_value = n * 2
 
 IO.inspect(vet1, label: "Input tensor 1")

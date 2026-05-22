@@ -1,10 +1,10 @@
-require OCLPolyHok
+require Orchestra
 
-# OCLPolyHok.set_debug_logs(true)
+# Orchestra.set_debug_logs(true)
 
 Nx.default_backend(Nx.BinaryBackend)
 
-OCLPolyHok.defmodule MM do
+Orchestra.defmodule MM do
   defk map2xy2D_kernel(arr1, arr2, par, resp, size, f) do
     row = get_global_id(1)
     col = get_global_id(0)
@@ -28,13 +28,13 @@ OCLPolyHok.defmodule MM do
     block_size = 4
     num_blocks = div(size + block_size - 1, block_size)
 
-    type = OCLPolyHok.get_type(arr1)
+    type = Orchestra.get_type(arr1)
 
     # Empty tensor to hold the result
-    result_nx = OCLPolyHok.tensor({size, size}, type)
+    result_nx = Orchestra.tensor({size, size}, type)
 
-    OCLPolyHok.with OCLPolyHok.cpu() do
-      OCLPolyHok.spawn(
+    Orchestra.with Orchestra.cpu() do
+      Orchestra.spawn(
         &MM.map2xy2D_kernel/6,
         {num_blocks, num_blocks},
         {block_size, block_size},
@@ -89,8 +89,8 @@ size = String.to_integer(arg)
 IO.puts("Using Nx backend: #{inspect(Nx.default_backend())}\n")
 
 # Generate random matrices in CPU memory
-mat1 = OCLPolyHok.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
-mat2 = OCLPolyHok.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
+mat1 = Orchestra.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
+mat2 = Orchestra.tensor({size, size}, {:f, 32}, fn _i -> :rand.uniform(100) * 1.0 end)
 
 timing_start = System.monotonic_time()
 
@@ -101,7 +101,7 @@ timing_end = System.monotonic_time()
 # Calculate times in milliseconds
 time = System.convert_time_unit(timing_end - timing_start, :native, :millisecond)
 
-IO.puts("OCLPolyHok (CPU)\t#{size}\t#{time}")
+IO.puts("Orchestra (CPU)\t#{size}\t#{time}")
 
 IO.puts("\nChecking results for 5 random positions...\n")
 CheckMM.check_spots(5, size, mat1, mat2, result)

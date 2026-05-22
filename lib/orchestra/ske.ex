@@ -1,6 +1,6 @@
-# require OCLPolyHok
+# require Orchestra
 
-# #OCLPolyHok.defmodule SkeKernels do
+# #Orchestra.defmodule SkeKernels do
 # #
 # # defk map_step_2_para_no_resp_kernel(d_array,  step, par1, par2,size,f) do
 # #    globalId  = blockDim.x * ( gridDim.x * blockIdx.y + blockIdx.x ) + threadIdx.x
@@ -13,7 +13,7 @@
 # #
 # #end
 
-# OCLPolyHok.defmodule Ske do
+# Orchestra.defmodule Ske do
 #   #defmacro __using__(_opts) do
 #   #     IO.puts "You are USIng!"
 #   #    end
@@ -22,24 +22,24 @@
 
 #   def reduce(ref, initial, f) do
 
-#      shape = OCLPolyHok.get_shape_gnx(ref)
-#      type = OCLPolyHok.get_type_gnx(ref)
+#      shape = Orchestra.get_shape_gnx(ref)
+#      type = Orchestra.get_type_gnx(ref)
 #      size = Tuple.product(shape)
-#       result_gpu  = OCLPolyHok.new_gnx(Nx.tensor([[initial]] , type: type))
+#       result_gpu  = Orchestra.new_gnx(Nx.tensor([[initial]] , type: type))
 
 #       threadsPerBlock = 256
 #       blocksPerGrid = div(size + threadsPerBlock - 1, threadsPerBlock)
 #       numberOfBlocks = blocksPerGrid
 
 #       case type do
-#         {:f,32} -> cas = OCLPolyHok.phok (fn (x,y,z) -> cas_float(x,y,z) end)
-#             OCLPolyHok.spawn(&Ske.reduce_kernel/6,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial, size, cas, f])
+#         {:f,32} -> cas = Orchestra.phok (fn (x,y,z) -> cas_float(x,y,z) end)
+#             Orchestra.spawn(&Ske.reduce_kernel/6,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial, size, cas, f])
 
-#         {:f,64} -> cas = OCLPolyHok.phok (fn (x,y,z) -> cas_double(x,y,z) end)
-#             OCLPolyHok.spawn(&Ske.reduce_kernel/6,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial, size, cas, f])
+#         {:f,64} -> cas = Orchestra.phok (fn (x,y,z) -> cas_double(x,y,z) end)
+#             Orchestra.spawn(&Ske.reduce_kernel/6,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial, size, cas, f])
 
-#         {:s,32} -> cas = OCLPolyHok.phok (fn (x,y,z) -> cas_int(x,y,z) end)
-#             OCLPolyHok.spawn(&Ske.reduce_kernel/6,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial, size, cas, f])
+#         {:s,32} -> cas = Orchestra.phok (fn (x,y,z) -> cas_int(x,y,z) end)
+#             Orchestra.spawn(&Ske.reduce_kernel/6,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial, size, cas, f])
 
 #         x -> raise "new_gnx: type #{x} not suported"
 #      end
@@ -132,14 +132,14 @@
 #     end
 #   end
 #   def map(input, f) do
-#     shape = OCLPolyHok.get_shape(input)
-#     type = OCLPolyHok.get_type(input)
-#     result_gpu = OCLPolyHok.new_gnx(shape,type)
+#     shape = Orchestra.get_shape(input)
+#     type = Orchestra.get_type(input)
+#     result_gpu = Orchestra.new_gnx(shape,type)
 #     size = Tuple.product(shape)
 #     threadsPerBlock = 128;
 #     numberOfBlocks = div(size + threadsPerBlock - 1, threadsPerBlock)
 
-#     OCLPolyHok.spawn(&Ske.map_ker/4,
+#     Orchestra.spawn(&Ske.map_ker/4,
 #               {numberOfBlocks,1,1},
 #               {threadsPerBlock,1,1},
 #               [input,result_gpu,size, f])
@@ -153,15 +153,15 @@
 #   end
 #   def map2(t1,t2,func) do
 
-#     shape = OCLPolyHok.get_shape_gnx(t1)
-#     type = OCLPolyHok.get_type_gnx(t2)
+#     shape = Orchestra.get_shape_gnx(t1)
+#     type = Orchestra.get_type_gnx(t2)
 #     size = Tuple.product shape
-#     result_gpu = OCLPolyHok.new_gnx(shape, type)
+#     result_gpu = Orchestra.new_gnx(shape, type)
 
 #       threadsPerBlock = 256;
 #       numberOfBlocks = div(size + threadsPerBlock - 1, threadsPerBlock)
 
-#       OCLPolyHok.spawn(&Ske.map2_kernel/5,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[t1,t2,result_gpu,size,func])
+#       Orchestra.spawn(&Ske.map2_kernel/5,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[t1,t2,result_gpu,size,func])
 
 
 #       result_gpu
@@ -180,7 +180,7 @@
 #   end
 #   def map_coord_2D_1_para_no_resp(d_array, par1, f) do
 
-#    {sizex,sizey,step} =  case OCLPolyHok.get_shape_gnx(d_array) do
+#    {sizex,sizey,step} =  case Orchestra.get_shape_gnx(d_array) do
 #                             {l,c} -> {l,c,1}
 #                             {l,c,step} -> {l,c,step}
 #                             x -> raise "Invalid shape for a 2D map: #{inspect x}!"
@@ -192,7 +192,7 @@
 #     grid_cols = trunc ((sizey + block_size - 1) / block_size)
 
 
-#     OCLPolyHok.spawn(&Ske.map_coord_2D_1_para_no_resp_kernel/6,{grid_cols,grid_rows,1},{block_size,block_size,1},[d_array,step,par1,sizex,sizey,f])
+#     Orchestra.spawn(&Ske.map_coord_2D_1_para_no_resp_kernel/6,{grid_cols,grid_rows,1},{block_size,block_size,1},[d_array,step,par1,sizex,sizey,f])
 #       d_array
 #   end
 #   defk map_coord_2D_2_para_no_resp_kernel(d_array,  step, par1, par2,sizex,sizey,f) do
@@ -209,7 +209,7 @@
 #   end
 #   def map_coord_2D_2_para_no_resp(d_array, par1, par2, f) do
 
-#    {sizex,sizey,step} =  case OCLPolyHok.get_shape_gnx(d_array) do
+#    {sizex,sizey,step} =  case Orchestra.get_shape_gnx(d_array) do
 #                             {l,c} -> {l,c,1}
 #                             {l,c,step} -> {l,c,step}
 #                             x -> raise "Invalid shape for a 2D map: #{inspect x}!"
@@ -221,16 +221,16 @@
 #     grid_cols = trunc ((sizey + block_size - 1) / block_size)
 
 
-#     OCLPolyHok.spawn(&Ske.map_coord_2D_2_para_no_resp_kernel/7,{grid_cols,grid_rows,1},{block_size,block_size,1},[d_array,step,par1,par2,sizex,sizey,f])
+#     Orchestra.spawn(&Ske.map_coord_2D_2_para_no_resp_kernel/7,{grid_cols,grid_rows,1},{block_size,block_size,1},[d_array,step,par1,par2,sizex,sizey,f])
 #       d_array
 #   end
 #   def map_2_para_no_resp(d_array,  par1, par2, f) do
 #       block_size =  128;
-#       {l,step} = OCLPolyHok.get_shape_gnx(d_array)
+#       {l,step} = Orchestra.get_shape_gnx(d_array)
 #       size = l*step
 #       nBlocks = floor ((size + block_size - 1) / block_size)
 
-#       OCLPolyHok.spawn(&Ske.map_step_2_para_no_resp_kernel/6,{nBlocks,1,1},{block_size,1,1},[d_array,step,par1,par2,l,f])
+#       Orchestra.spawn(&Ske.map_step_2_para_no_resp_kernel/6,{nBlocks,1,1},{block_size,1,1},[d_array,step,par1,par2,l,f])
 #       d_array
 #   end
 #   defk map_step_2_para_no_resp_kernel(d_array,  step, par1, par2,size,f) do

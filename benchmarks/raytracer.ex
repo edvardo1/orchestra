@@ -1,4 +1,4 @@
-require OCLPolyHok
+require Orchestra
 
 defmodule BMP do
   @on_load :load_nifs
@@ -25,7 +25,7 @@ defmodule BMP do
   end
 end
 
-OCLPolyHok.defmodule RayTracer do
+Orchestra.defmodule RayTracer do
   defd raytracing(image, width, spheres, x, y) do
     ox = 0.0
     oy = 0.0
@@ -84,7 +84,7 @@ OCLPolyHok.defmodule RayTracer do
   end
 
   def mapxy_2D_para_no_resp(d_array, step, par1, par2, size, f) do
-    OCLPolyHok.spawn(
+    Orchestra.spawn(
       &RayTracer.mapxy_2D_step_2_para_no_resp_kernel/6,
       {trunc(size / 16), trunc(size / 16), 1},
       {16, 16, 1},
@@ -167,8 +167,8 @@ defmodule Main do
 
     prev = System.monotonic_time()
 
-    ref_sphere = OCLPolyHok.new_gnx(sphereList)
-    ref_image = OCLPolyHok.new_gnx(1, width * height * 4, {:s, 32})
+    ref_sphere = Orchestra.new_gnx(sphereList)
+    ref_image = Orchestra.new_gnx(1, width * height * 4, {:s, 32})
 
     RayTracer.mapxy_2D_para_no_resp(
       ref_image,
@@ -179,12 +179,12 @@ defmodule Main do
       &RayTracer.raytracing/5
     )
 
-    _image = OCLPolyHok.get_gnx(ref_image)
+    _image = Orchestra.get_gnx(ref_image)
 
     next = System.monotonic_time()
 
     IO.puts(
-      "OCLPolyHok\t#{width}\t#{System.convert_time_unit(next - prev, :native, :millisecond)} "
+      "Orchestra\t#{width}\t#{System.convert_time_unit(next - prev, :native, :millisecond)} "
     )
 
     # BMP.gen_bmp_int(~c"ray.bmp",width,image)

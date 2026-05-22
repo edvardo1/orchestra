@@ -1,6 +1,6 @@
-require OCLPolyHok
+require Orchestra
 
-# OCLPolyHok.set_debug_logs(true)
+# Orchestra.set_debug_logs(true)
 
 defmodule BMP do
   @on_load :load_nifs
@@ -27,7 +27,7 @@ defmodule BMP do
   end
 end
 
-OCLPolyHok.defmodule Julia do
+Orchestra.defmodule Julia do
   defd julia(x, y, dim) do
     scale = 0.1
     jx = scale * (dim - x) / dim
@@ -79,17 +79,17 @@ OCLPolyHok.defmodule Julia do
     f = &Julia.julia_function/4
 
     result =
-      OCLPolyHok.with OCLPolyHok.gpu() do
-        result_gnx = OCLPolyHok.new_gnx({size * size, 4}, {:s, 32})
+      Orchestra.with Orchestra.gpu() do
+        result_gnx = Orchestra.new_gnx({size * size, 4}, {:s, 32})
 
-        OCLPolyHok.spawn(
+        Orchestra.spawn(
           &Julia.mapgen2D_xy_1para_noret_ker/4,
           {numberOfBlocks, numberOfBlocks, 1},
           {threadsPerDimension, threadsPerDimension, 1},
           [result_gnx, size, size, f]
         )
 
-        OCLPolyHok.get_gnx(result_gnx)
+        Orchestra.get_gnx(result_gnx)
       end
 
     result
@@ -106,7 +106,7 @@ image = Julia.run_julia(dim)
 next = System.monotonic_time()
 
 IO.puts(
-  "OCLPolyHok (GPU)\t#{dim}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}"
+  "Orchestra (GPU)\t#{dim}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}"
 )
 
 BMP.gen_bmp_int(~c"julia_set.bmp", dim, image)

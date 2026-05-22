@@ -1,6 +1,6 @@
 require OrchestraFunctions
 
-defmodule OCLPolyHok.OpenCLBackend do
+defmodule Orchestra.OpenCLBackend do
   # @atomic_functions_names %{
   #   atomic_add: "atomic_fetch_add",
   #   atomic_sub: "atomic_fetch_sub",
@@ -35,7 +35,7 @@ defmodule OCLPolyHok.OpenCLBackend do
 
     {:__aliases__, _, [module_name]} = header
 
-    # The 'JIT.process_module' line is the same called in OCLPolyHok.defmodule macro.
+    # The 'JIT.process_module' line is the same called in Orchestra.defmodule macro.
     # It is here to ensure that the body will always be processed during runtime.
     using =
       quote do
@@ -505,7 +505,7 @@ defmodule OCLPolyHok.OpenCLBackend do
     end
   end
 
-  # Gera uma expressão em C a partir de uma expressão PolyHok.
+  # Gera uma expressão em C a partir de uma expressão Orchestra.
   defp gen_exp(exp) do
     case exp do
       # Acesso a um índice de um array

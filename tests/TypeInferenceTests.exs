@@ -1,9 +1,9 @@
-require OCLPolyHok
+require Orchestra
 
-OCLPolyHok.set_debug_logs(true)
-OCLPolyHok.TypeInference.set_debug_logs(true)
+Orchestra.set_debug_logs(true)
+Orchestra.TypeInference.set_debug_logs(true)
 
-OCLPolyHok.defmodule TypeInferenceTests do
+Orchestra.defmodule TypeInferenceTests do
   defd comp_num(num) do
     return(sqrt(num * num))
   end
@@ -30,7 +30,7 @@ OCLPolyHok.defmodule TypeInferenceTests do
     threadsPerBlock = 32
     numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
 
-    OCLPolyHok.spawn(&TypeInferenceTests.type_inference_ker/2,
+    Orchestra.spawn(&TypeInferenceTests.type_inference_ker/2,
               {numberOfBlocks, 1, 1},
               {threadsPerBlock, 1, 1},
               [gpu_array, len])
@@ -42,9 +42,9 @@ end
 # Tamanho 100
 len = 100
 # Cria novo array na GPU com 'len' colunas e tipo de dado float com 32 bits
-gpu_array = OCLPolyHok.new_gnx({len}, {:f, 32})
+gpu_array = Orchestra.new_gnx({len}, {:f, 32})
 
 # Roda o kernel na GPU e copia o resultado de para a RAM
-ram_array = TypeInferenceTests.run_kernel(gpu_array, len) |> OCLPolyHok.get_gnx()
+ram_array = TypeInferenceTests.run_kernel(gpu_array, len) |> Orchestra.get_gnx()
 
 IO.inspect(ram_array, label: "Array após execução do kernel")

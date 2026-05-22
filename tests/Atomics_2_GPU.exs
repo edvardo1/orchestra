@@ -1,8 +1,8 @@
-require OCLPolyHok
+require Orchestra
 
-OCLPolyHok.set_debug_logs(true)
+Orchestra.set_debug_logs(true)
 
-OCLPolyHok.defmodule Atomics_2 do
+Orchestra.defmodule Atomics_2 do
   defd atomic_add_d(atomic(counter), val) do
     return atomic_add_int(counter, val)
   end
@@ -20,19 +20,19 @@ OCLPolyHok.defmodule Atomics_2 do
     num_blocks = div(total_threads + block_size - 1, block_size)
 
     {res_counter, res_array} =
-      OCLPolyHok.with OCLPolyHok.gpu() do
-        counter_gnx = OCLPolyHok.new_gnx(counter_tensor)
-        out_array_gnx = OCLPolyHok.new_gnx({total_threads}, :s32)
+      Orchestra.with Orchestra.gpu() do
+        counter_gnx = Orchestra.new_gnx(counter_tensor)
+        out_array_gnx = Orchestra.new_gnx({total_threads}, :s32)
 
-        OCLPolyHok.spawn(
+        Orchestra.spawn(
           &Atomics_2.atomic_kernel_2/2,
           {num_blocks},
           {block_size},
           [counter_gnx, out_array_gnx]
         )
 
-        res_counter = OCLPolyHok.get_gnx(counter_gnx)
-        res_array = OCLPolyHok.get_gnx(out_array_gnx)
+        res_counter = Orchestra.get_gnx(counter_gnx)
+        res_array = Orchestra.get_gnx(out_array_gnx)
 
         {res_counter, res_array}
       end
@@ -45,7 +45,7 @@ end
 total_threads = 1024
 
 # Counter tensor
-counter_tensor = OCLPolyHok.tensor([0], :s32)
+counter_tensor = Orchestra.tensor([0], :s32)
 
 # Launching kernel
 {counter_res, array_res} = Atomics_2.launch(counter_tensor, total_threads)

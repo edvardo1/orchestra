@@ -1,4 +1,4 @@
-require OCLPolyHok
+require Orchestra
 import Bitwise
 
 #Random.seed(313)
@@ -24,7 +24,7 @@ end
   end
 end
 
-OCLPolyHok.defmodule RayTracer do
+Orchestra.defmodule RayTracer do
 
 
 defk raytracing(width, height, spheres, image) do
@@ -195,15 +195,15 @@ defmodule Main do
 
         prev = System.monotonic_time()
 
-        refSphere = OCLPolyHok.new_gnx(sphereList)
-        refImag = OCLPolyHok.new_gnx(1,width * height  * 4,{:s,32})
+        refSphere = Orchestra.new_gnx(sphereList)
+        refImag = Orchestra.new_gnx(1,width * height  * 4,{:s,32})
 
-        OCLPolyHok.spawn_jit(&RayTracer.raytracing/4,{trunc(width/16),trunc(height/16),1},{16,16,1},[width, height, refSphere, refImag])
+        Orchestra.spawn_jit(&RayTracer.raytracing/4,{trunc(width/16),trunc(height/16),1},{16,16,1},[width, height, refSphere, refImag])
 
-        image = OCLPolyHok.get_gnx(refImag)
+        image = Orchestra.get_gnx(refImag)
 
         next = System.monotonic_time()
-        IO.puts "OCLPolyHok\t#{width}\t#{System.convert_time_unit(next-prev,:native,:millisecond)} "
+        IO.puts "Orchestra\t#{width}\t#{System.convert_time_unit(next-prev,:native,:millisecond)} "
 
 
         BMP.gen_bmp_int('ray.bmp',width,image)

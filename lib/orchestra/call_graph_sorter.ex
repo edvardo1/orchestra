@@ -1,4 +1,4 @@
-defmodule OCLPolyHok.CallGraphSorter do
+defmodule Orchestra.CallGraphSorter do
   @moduledoc """
   This module provides a function to sort a list of functions based on their call dependencies.
   It uses a topological sort approach to ensure that if function A calls function B, then B will appear before A in the sorted list.

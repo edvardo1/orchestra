@@ -1,4 +1,4 @@
-defmodule OCLPolyHok.Application do
+defmodule Orchestra.Application do
   use Application
 
   @impl true
@@ -14,7 +14,7 @@ defmodule OCLPolyHok.Application do
       }
     ]
 
-    opts = [strategy: :one_for_one, name: OCLPolyHok.Supervisor]
+    opts = [strategy: :one_for_one, name: Orchestra.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end

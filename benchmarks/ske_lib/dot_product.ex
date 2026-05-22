@@ -1,20 +1,20 @@
-require OCLPolyHok
+require Orchestra
 require Integer
 #Nx.default_backend(EXLA.Backend)
 #import Nx
-OCLPolyHok.defmodule DP do
+Orchestra.defmodule DP do
 include CAS_Poly
   def reduce(ref, initial, f) do
 
-     {l,c} = OCLPolyHok.get_shape_gnx(ref)
-     type = OCLPolyHok.get_type_gnx(ref)
+     {l,c} = Orchestra.get_shape_gnx(ref)
+     type = Orchestra.get_type_gnx(ref)
      size = l*c
-      result_gpu  = OCLPolyHok.new_gnx(Nx.tensor([[initial]] , type: type))
+      result_gpu  = Orchestra.new_gnx(Nx.tensor([[initial]] , type: type))
 
       threadsPerBlock = 256
       blocksPerGrid = div(size + threadsPerBlock - 1, threadsPerBlock)
       numberOfBlocks = blocksPerGrid
-      OCLPolyHok.spawn(&DP.reduce_kernel/5,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial,f, size])
+      Orchestra.spawn(&DP.reduce_kernel/5,{numberOfBlocks,1,1},{threadsPerBlock,1,1},[ref,result_gpu, initial,f, size])
       result_gpu
   end
   defk reduce_kernel(a, ref4, initial,f,n) do
@@ -92,7 +92,7 @@ include CAS_Poly
   end
   defp gen_nx_f(size,ref), do:  %Nx.Tensor{data: %Nx.BinaryBackend{ state: ref}, type: {:f,32}, shape: {1,size}, names: [nil,nil]}
 end
-#OCLPolyHok.include [DP]
+#Orchestra.include [DP]
 
 use Ske
 
@@ -107,19 +107,19 @@ vet2 = DP.new_dataset_nx_b(n)
 
 prev = System.monotonic_time()
 
-ref1 = OCLPolyHok.new_gnx(vet1)
+ref1 = Orchestra.new_gnx(vet1)
 
-ref2 = OCLPolyHok.new_gnx(vet2)
+ref2 = Orchestra.new_gnx(vet2)
 
 
 _result = ref1
-    |> Ske.map(ref2, OCLPolyHok.phok fn (a,b) -> a * b end)
-    |> Ske.reduce(0.0,OCLPolyHok.phok fn (a,b) -> a + b end)
-    |> OCLPolyHok.get_gnx
+    |> Ske.map(ref2, Orchestra.phok fn (a,b) -> a * b end)
+    |> Ske.reduce(0.0,Orchestra.phok fn (a,b) -> a + b end)
+    |> Orchestra.get_gnx
 
 #IO.inspect result
 
 next = System.monotonic_time()
 
 
-IO.puts "OCLPolyHok\t#{n}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
+IO.puts "Orchestra\t#{n}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"

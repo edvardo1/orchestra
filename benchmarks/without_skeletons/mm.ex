@@ -1,6 +1,6 @@
 
-require OCLPolyHok
-OCLPolyHok.defmodule MM do
+require Orchestra
+Orchestra.defmodule MM do
 
  defk mm(a,b,c,m,n,k) do
   row  = blockIdx.y * blockDim.y + threadIdx.y
@@ -29,8 +29,8 @@ block_size = 16
 grid_rows = trunc ((m + block_size - 1) / block_size)
 grid_cols = trunc ((k + block_size - 1) / block_size)
 
-#mat1 = OCLPolyHok.new_nx_from_function(1,m*m,{:f,32},fn -> :rand.uniform(1000) end )
-#mat2 = OCLPolyHok.new_nx_from_function(1,m*m,{:f,32},fn -> :rand.uniform(1000) end)
+#mat1 = Orchestra.new_nx_from_function(1,m*m,{:f,32},fn -> :rand.uniform(1000) end )
+#mat2 = Orchestra.new_nx_from_function(1,m*m,{:f,32},fn -> :rand.uniform(1000) end)
 
 mat1 = Nx.tensor(Enum.to_list(1..(m*m)), type: :f32)
 mat2 = Nx.tensor(Enum.to_list(1..(m*m)),  type: :f32)
@@ -40,13 +40,13 @@ mat2 = Nx.reshape(mat2,{m,m})
 
 prev = System.monotonic_time()
 
-a=OCLPolyHok.new_gnx(mat1)
-b=OCLPolyHok.new_gnx(mat2)
-c=OCLPolyHok.new_gnx(1,m*k, {:f,32})
+a=Orchestra.new_gnx(mat1)
+b=Orchestra.new_gnx(mat2)
+c=Orchestra.new_gnx(1,m*k, {:f,32})
 
-OCLPolyHok.spawn(&MM.mm/6,{grid_rows,grid_cols,1},{block_size,block_size,1},[a,b,c,m,n,k])
+Orchestra.spawn(&MM.mm/6,{grid_rows,grid_cols,1},{block_size,block_size,1},[a,b,c,m,n,k])
 
-result = OCLPolyHok.get_gnx(c)
+result = Orchestra.get_gnx(c)
 
 r2 = Nx.dot(mat2,mat1)
 
@@ -56,7 +56,7 @@ IO.inspect r2
 
 next = System.monotonic_time()
 #IO.puts "time gpu #{System.convert_time_unit(next-prev,:native,:millisecond)}"
-IO.puts "OCLPolyHok\t#{m}\t#{System.convert_time_unit(next-prev,:native,:millisecond)} "
+IO.puts "Orchestra\t#{m}\t#{System.convert_time_unit(next-prev,:native,:millisecond)} "
 
 #IO.inspect result
 #IO.puts GPU.Backend.gen_c_kernel('addVectors',4,[])

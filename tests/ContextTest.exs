@@ -1,8 +1,8 @@
-require OCLPolyHok
+require Orchestra
 
-OCLPolyHok.set_debug_logs(true)
+Orchestra.set_debug_logs(true)
 
-OCLPolyHok.defmodule ArraySum do
+Orchestra.defmodule ArraySum do
   defk sum_ker(a1, a2, result_array, size) do
     index = get_global_id(0)
 
@@ -12,20 +12,20 @@ OCLPolyHok.defmodule ArraySum do
   end
 end
 
-cpu_ctx = OCLPolyHok.cpu()
+cpu_ctx = Orchestra.cpu()
 
 IO.puts("Created CPU context: #{inspect(cpu_ctx)}")
 
-arr_1 = OCLPolyHok.tensor([1,2,3], type: {:s, 32})
-arr_2 = OCLPolyHok.tensor([2,4,6], type: {:s, 32})
-arr_res = OCLPolyHok.tensor([0,0,0], type: {:s, 32})
+arr_1 = Orchestra.tensor([1,2,3], type: {:s, 32})
+arr_2 = Orchestra.tensor([2,4,6], type: {:s, 32})
+arr_res = Orchestra.tensor([0,0,0], type: {:s, 32})
 
 IO.puts("Input Array 1: #{inspect(arr_1)}")
 IO.puts("Input Array 2: #{inspect(arr_2)}")
 IO.puts("Result Array before computation: #{inspect(arr_res)}")
 
-OCLPolyHok.with cpu_ctx do
-  OCLPolyHok.spawn(
+Orchestra.with cpu_ctx do
+  Orchestra.spawn(
       &ArraySum.sum_ker/4,
       {1, 1, 1},
       {3, 1, 1},

@@ -1,9 +1,9 @@
-require OCLPolyHok
+require Orchestra
 require Integer
 
-# OCLPolyHok.set_debug_logs(true)
+# Orchestra.set_debug_logs(true)
 
-OCLPolyHok.defmodule DP do
+Orchestra.defmodule DP do
   include(CAS_Poly)
 
   defk map_2kernel(a1, a2, a3, size, f) do
@@ -52,51 +52,51 @@ OCLPolyHok.defmodule DP do
   end
 
   def map2(t1, t2, func) do
-    shape = OCLPolyHok.get_shape(t1)
-    type = OCLPolyHok.get_type(t1)
+    shape = Orchestra.get_shape(t1)
+    type = Orchestra.get_type(t1)
     len = Nx.size(shape)
 
     threadsPerBlock = 64
     numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
-    
-    result = OCLPolyHok.with OCLPolyHok.gpu() do
-      t1_gnx = OCLPolyHok.new_gnx(t1)
-      t2_gnx = OCLPolyHok.new_gnx(t2)
-      result_gnx = OCLPolyHok.new_gnx(shape, type)
 
-      OCLPolyHok.spawn(
+    result = Orchestra.with Orchestra.gpu() do
+      t1_gnx = Orchestra.new_gnx(t1)
+      t2_gnx = Orchestra.new_gnx(t2)
+      result_gnx = Orchestra.new_gnx(shape, type)
+
+      Orchestra.spawn(
         &DP.map_2kernel/5,
         {numberOfBlocks, 1, 1},
         {threadsPerBlock, 1, 1},
         [t1_gnx, t2_gnx, result_gnx, len, func]
       )
 
-      OCLPolyHok.get_gnx(result_gnx)
+      Orchestra.get_gnx(result_gnx)
     end
 
     result
   end
 
   def reduce(tensor, initial, f) do
-    shape = OCLPolyHok.get_shape(tensor)
-    type = OCLPolyHok.get_type(tensor)
+    shape = Orchestra.get_shape(tensor)
+    type = Orchestra.get_type(tensor)
     len = Nx.size(shape)
 
     threadsPerBlock = 64
     numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
-    
-    result = OCLPolyHok.with OCLPolyHok.gpu() do
-      tensor_gnx = OCLPolyHok.new_gnx(tensor)
-      result_gnx = OCLPolyHok.new_gnx({1}, type)
 
-      OCLPolyHok.spawn(
+    result = Orchestra.with Orchestra.gpu() do
+      tensor_gnx = Orchestra.new_gnx(tensor)
+      result_gnx = Orchestra.new_gnx({1}, type)
+
+      Orchestra.spawn(
         &DP.reduce_kernel/5,
         {numberOfBlocks, 1, 1},
         {threadsPerBlock, 1, 1},
         [tensor_gnx, result_gnx, initial, f, len]
       )
 
-      OCLPolyHok.get_gnx(result_gnx)
+      Orchestra.get_gnx(result_gnx)
     end
 
     result
@@ -107,12 +107,12 @@ end
 
 n = String.to_integer(arg)
 
-vet1 = OCLPolyHok.tensor({n}, :f32, fn _i -> 1.0 end)
-vet2 = OCLPolyHok.tensor({n}, :f32, fn _i -> 2.0 end)
+vet1 = Orchestra.tensor({n}, :f32, fn _i -> 1.0 end)
+vet2 = Orchestra.tensor({n}, :f32, fn _i -> 2.0 end)
 
 prev = System.monotonic_time()
 
-res = DP.map2(vet1, vet2, OCLPolyHok.phok(fn a, b -> a * b end)) |> DP.reduce(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
+res = DP.map2(vet1, vet2, Orchestra.phok(fn a, b -> a * b end)) |> DP.reduce(0.0, Orchestra.phok(fn a, b -> a + b end))
 
 next = System.monotonic_time()
 
@@ -124,4 +124,4 @@ IO.inspect(vet2, label: "Input tensor 2")
 IO.inspect(res_value, label: "Dot product result")
 IO.puts("Expected result: #{expected_value}")
 
-IO.puts("OCLPolyHok (GPU)\t#{n}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")
+IO.puts("Orchestra (GPU)\t#{n}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}")

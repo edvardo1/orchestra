@@ -1,4 +1,4 @@
-require OCLPolyHok
+require Orchestra
 
 defmodule BMP do
   @on_load :load_nifs
@@ -25,7 +25,7 @@ defmodule BMP do
   end
 end
 
-OCLPolyHok.defmodule Julia do
+Orchestra.defmodule Julia do
   defd julia(x, y, dim) do
     scale = 0.1
     jx = scale * (dim - x) / dim
@@ -71,15 +71,15 @@ OCLPolyHok.defmodule Julia do
   end
 
   def run_julia(size) do
-    result_tensor = OCLPolyHok.tensor({size * size, 4}, {:s, 32})
+    result_tensor = Orchestra.tensor({size * size, 4}, {:s, 32})
 
     threadsPerDimension = 4
     numberOfBlocks = div(size + threadsPerDimension - 1, threadsPerDimension)
 
     f = &Julia.julia_function/4
 
-    OCLPolyHok.with OCLPolyHok.cpu() do
-      OCLPolyHok.spawn(
+    Orchestra.with Orchestra.cpu() do
+      Orchestra.spawn(
         &Julia.mapgen2D_xy_1para_noret_ker/4,
         {numberOfBlocks, numberOfBlocks, 1},
         {threadsPerDimension, threadsPerDimension, 1},
@@ -101,7 +101,7 @@ image = Julia.run_julia(dim)
 next = System.monotonic_time()
 
 IO.puts(
-  "OCLPolyHok (CPU)\t#{dim}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}"
+  "Orchestra (CPU)\t#{dim}\t#{System.convert_time_unit(next - prev, :native, :millisecond)}"
 )
 
 BMP.gen_bmp_int(~c"julia_set.bmp", dim, image)

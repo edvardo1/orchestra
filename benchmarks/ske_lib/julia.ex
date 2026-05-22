@@ -1,4 +1,4 @@
-require OCLPolyHok
+require Orchestra
 defmodule BMP do
   @on_load :load_nifs
   def load_nifs do
@@ -20,7 +20,7 @@ end
   end
 end
 
-OCLPolyHok.defmodule Julia do
+Orchestra.defmodule Julia do
   defd julia(x,y,dim) do
     scale  = 0.1
     jx = scale * (dim - x)/dim
@@ -64,16 +64,16 @@ dim = m
 
 #values_per_pixel = 4
 
-result_gpu = OCLPolyHok.new_gnx({dim,dim,4},{:s,32})
+result_gpu = Orchestra.new_gnx({dim,dim,4},{:s,32})
 
 prev = System.monotonic_time()
 
 image = result_gpu
   |> Ske.map(&Julia.julia_function/4,[dim], return: false, dim: :two, coord: true)
-  |> OCLPolyHok.get_gnx
+  |> Orchestra.get_gnx
 
 next = System.monotonic_time()
 
-IO.puts "OCLPolyHok\t#{dim}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
+IO.puts "Orchestra\t#{dim}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
 
 BMP.gen_bmp_int('juliaske.bmp',dim,image)
