@@ -1,18 +1,10 @@
-# OCL-PolyHok: An OpenCL backend for PolyHok
+# Orchestra
 
-The OCL-PolyHok project is an extension of the [PolyHok DSL](https://github.com/ardubois/poly_hok) that uses OpenCL as the backend technology for parallel computing instead of CUDA.
-
-This implementation expands the compatible hardware range of PolyHok by leveraging OpenCL's ability to run accross various GPUs from different vendors.
-
-## OCL-PolyHok Features
-
-- Support for a wide range of GPUs without losing PolyHok's high-level abstractions
-- Supports both CUDA and OpenCL syntax style for indexing
-- Seamless integration with existing PolyHok codebases
+Orchestra is a DSL for cooperative heterogeneous programming based on the [OCL-PolyHok](https://github.com/Equiel-1703/ocl-polyhok) DSL.
 
 ## Prerequisites
 
-To get started with OCL-PolyHok, first ensure you have the following prerequisites on your system:
+To get started with Orchestra, first ensure you have the following prerequisites on your system:
 
 - **Elixir 1.17 with Erlang/OTP 27 or higher**. We recommend using [asdf](https://asdf-vm.com/) for managing Elixir and Erlang versions.
 
@@ -55,8 +47,8 @@ Once you have the prerequisites, follow these steps to set up and compile the pr
 1. Clone the repository and navigate to the project directory:
 
    ```bash
-   git clone https://github.com/Equiel-1703/ocl-polyhok.git
-   cd ocl-polyhok
+   git clone https://github.com/Equiel-1703/orchestra.git
+   cd orchestra
    ```
 
 2. Get Elixir dependencies:
@@ -65,7 +57,7 @@ Once you have the prerequisites, follow these steps to set up and compile the pr
     mix deps.get
     ```
 
-3. Generate build scritps and compile the C++ NIFS for OCL-PolyHok's OpenCL runtime and BMP generation:
+3. Generate CMake build scritps and compile the C++ NIFS for Orchestra's OpenCL runtime and BMP generation:
 
     ```bash
     mkdir CMake
@@ -79,13 +71,7 @@ Once you have the prerequisites, follow these steps to set up and compile the pr
     mix compile
     ```
 
-5. All done! You can now run the provided benchmarks or start developing your own PolyHok applications. As an example, this snippet runs the Julia set benchmark generating a 1,024 x 1,024 BMP image:
-
-    ```bash
-    mix run benchmarks/julia.ex 1024
-    ```
-
-<img width="1024" height="1024" alt="juliaske.bmp" src="https://github.com/user-attachments/assets/0bd736da-aeae-4702-9c84-15b5c5674ed1" />
+5. All done! You can now run the provided benchmarks or start developing your own Orchestra's applications.
 
 ## Licensing
 
