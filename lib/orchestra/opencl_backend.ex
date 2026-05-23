@@ -162,15 +162,15 @@ defmodule Orchestra.OpenCLBackend do
   end
 
   def gen_para(p, :tatomic_int) do
-    "volatile __global atomic_int *#{p}"
+    "ATOMIC_INT_PTR #{p}"
   end
 
   def gen_para(p, :tatomic_float) do
-    "volatile __global atomic_float *#{p}"
+    "ATOMIC_FLOAT_PTR #{p}"
   end
 
   def gen_para(p, :tatomic_double) do
-    "volatile __global atomic_double *#{p}"
+    "ATOMIC_DOUBLE_PTR #{p}"
   end
 
   def gen_para(_p, {_ret, _type}) do

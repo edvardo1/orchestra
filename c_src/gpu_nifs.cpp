@@ -22,11 +22,8 @@
 
 bool debug_logs = false;
 
-bool gpu_fp64_supported = false;
-bool gpu_int64_base_atomics_supported = false;
-
-bool cpu_fp64_supported = false;
-bool cpu_int64_base_atomics_supported = false;
+bool gpu_double_support = false;
+bool cpu_double_support = false;
 
 OCLInterface *open_cl = nullptr;
 
@@ -93,50 +90,16 @@ void init_ocl(ErlNifEnv *env)
     // If it doesn't find a CPU and GPU, it will throw an exception and print an error message in cerr.
     open_cl->selectPlatformsAndDevices();
 
-    // Check for double data type support in GPU and int64 atomics support (required for compare and swap (CAS) operations)
-    std::vector<std::string> desired_extensions = {"cl_khr_fp64", "cl_khr_int64_base_atomics"};
-    std::vector<std::pair<std::string, bool>> gpu_extensions_supported = open_cl->checkDeviceExtensions(desired_extensions, OCLInterface::DeviceType::GPU);
-    std::vector<std::pair<std::string, bool>> cpu_extensions_supported = open_cl->checkDeviceExtensions(desired_extensions, OCLInterface::DeviceType::CPU);
+    // Check SVM capabilities of devices. Throws exception if one of them don't support.
+    open_cl->checkDevicesSVMCapabilities();
 
-    // Update global flags for extension support
-    for (const auto &ext : gpu_extensions_supported)
-    {
-      if (ext.first == "cl_khr_fp64")
-      {
-        gpu_fp64_supported = ext.second;
-      }
-      else if (ext.first == "cl_khr_int64_base_atomics")
-      {
-        gpu_int64_base_atomics_supported = ext.second;
-      }
-    }
-    for (const auto &ext : cpu_extensions_supported)
-    {
-      if (ext.first == "cl_khr_fp64")
-      {
-        cpu_fp64_supported = ext.second;
-      }
-      else if (ext.first == "cl_khr_int64_base_atomics")
-      {
-        cpu_int64_base_atomics_supported = ext.second;
-      }
-    }
+    // Check for double data type support
+    gpu_double_support = open_cl->checkDeviceForDoubleSupport(OCLInterface::DeviceType::GPU);
+    cpu_double_support = open_cl->checkDeviceForDoubleSupport(OCLInterface::DeviceType::CPU);
 
-    // If both extensions are supported, then the selected GPU can handle the double type
-    if (gpu_fp64_supported && gpu_int64_base_atomics_supported)
-    {
-      // Define flag for double support in OpenCL build options
-      open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1", OCLInterface::DeviceType::GPU);
-    }
-    if (cpu_fp64_supported && cpu_int64_base_atomics_supported)
-    {
-      // Define flag for double support in OpenCL build options
-      open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1", OCLInterface::DeviceType::CPU);
-    }
-
-    // Add ignore warnings and OpenCL standard 2.0 build option (regardless of double support) in the GPU and CPU
-    open_cl->setBuildOptions(open_cl->getBuildOptions(OCLInterface::DeviceType::GPU) + " -w -cl-std=CL2.0", OCLInterface::DeviceType::GPU);
-    open_cl->setBuildOptions(open_cl->getBuildOptions(OCLInterface::DeviceType::CPU) + " -w -cl-std=CL2.0", OCLInterface::DeviceType::CPU);
+    // Add ignore warnings and OpenCL standard 3.0 build option in the GPU and CPU
+    open_cl->setBuildOptions(open_cl->getBuildOptions(OCLInterface::DeviceType::GPU) + " -w -cl-std=CL3.0 -D TARGET_CPU=1", OCLInterface::DeviceType::GPU);
+    open_cl->setBuildOptions(open_cl->getBuildOptions(OCLInterface::DeviceType::CPU) + " -w -cl-std=CL3.0 -D TARGET_GPU=1", OCLInterface::DeviceType::CPU);
   }
   catch (const std::exception &e)
   {
@@ -241,6 +204,12 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
 
   std::string code(size_code, '\0');
   enif_get_string(env, e_code, code.data(), size_code + 1, ERL_NIF_LATIN1);
+
+  // Injecting atomics definitions and functions
+  // Currently, we're injecting this stuff no matter if the kernel makes
+  // use of atomics or not. I don't know if this is a big deal or not.
+  // - Henrique
+  open_cl->injectAtomicsHeader(code);
 
   // Creating program and kernel objects
   cl::Program program;
@@ -428,8 +397,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
         strcmp(arg_type_name, "tdouble") == 0 ||
         strcmp(arg_type_name, "tatomic_int") == 0 ||
         strcmp(arg_type_name, "tatomic_float") == 0 ||
-        strcmp(arg_type_name, "tatomic_double") == 0
-    )
+        strcmp(arg_type_name, "tatomic_double") == 0)
     {
       if (device_type == OCLInterface::DeviceType::GPU)
       {
@@ -828,14 +796,14 @@ static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int argc, const ERL_NIF
   switch (device_type)
   {
   case OCLInterface::DeviceType::GPU:
-    if (gpu_fp64_supported && gpu_int64_base_atomics_supported)
+    if (gpu_double_support)
     {
       return enif_make_atom(env, "true");
     }
     break;
 
   case OCLInterface::DeviceType::CPU:
-    if (cpu_fp64_supported && cpu_int64_base_atomics_supported)
+    if (cpu_double_support)
     {
       return enif_make_atom(env, "true");
     }

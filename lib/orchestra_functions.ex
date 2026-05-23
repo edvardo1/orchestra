@@ -118,92 +118,74 @@ defmodule OrchestraFunctions do
     atomic_add_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_fetch_add"
     },
     atomic_add_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
-      opencl_name: "atomic_fetch_add"
     },
     atomic_add_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
-      opencl_name: "atomic_fetch_add"
     },
     atomic_sub_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_fetch_sub"
     },
     atomic_sub_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
-      opencl_name: "atomic_fetch_sub"
     },
     atomic_sub_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
-      opencl_name: "atomic_fetch_sub"
     },
     atomic_exchange_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_exchange"
     },
     atomic_exchange_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
-      opencl_name: "atomic_exchange"
     },
     atomic_exchange_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
-      opencl_name: "atomic_exchange"
     },
     atomic_min_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_fetch_min"
     },
     atomic_min_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
-      opencl_name: "atomic_fetch_min"
     },
     atomic_min_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
-      opencl_name: "atomic_fetch_min"
     },
     atomic_max_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_fetch_max"
     },
     atomic_max_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
-      opencl_name: "atomic_fetch_max"
     },
     atomic_max_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
-      opencl_name: "atomic_fetch_max"
     },
     atomic_and: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_fetch_and"
     },
     atomic_or: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_fetch_or"
     },
     atomic_xor: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
-      opencl_name: "atomic_fetch_xor"
     }
   }
 

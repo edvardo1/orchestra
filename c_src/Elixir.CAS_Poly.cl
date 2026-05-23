@@ -26,10 +26,7 @@ inline float cas_float(volatile __global float *address, float oldv, float newv)
     return as_float(i_res);
 }
 
-#if DOUBLE_SUPPORTED
-
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+#if defined(__opencl_c_fp64)
 
 inline double cas_double(volatile __global double *address, double oldv, double newv) {
     volatile __global ulong *l_address = (volatile __global ulong *)address;

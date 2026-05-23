@@ -33,17 +33,6 @@ private:
     cl::CommandQueue gpu_command_queue, cpu_command_queue;
 
     /**
-     * @deprecated This function is deprecated and is not recommended for use. I left it here just in case, but it may be removed in 
-     * future versions.
-     *
-     * @brief Reads the kernel code from a file.
-     *
-     * @param file_name The name of the file containing the kernel code.
-     * @return The kernel code as a string.
-     */
-    std::string getKernelCode(const char *file_name);
-
-    /**
      * @brief OpenCL program build options for the GPU.
      */
     std::string build_options_gpu;
@@ -61,6 +50,16 @@ private:
      * @brief Alignment requirement in bytes of the CPU for efficient memory access.
      */
     cl_uint cpu_alignment_bytes = 0;
+
+    /**
+     * @brief Holds the atomics type definitions in OpenCL C and inlined functions.
+     */
+    std::string atomics_header;
+
+    /**
+     * @brief Reads the contents of a file as an std::string.
+     */
+    std::string read_file(const std::string &filepath);
 
 public:
     /**
@@ -95,9 +94,9 @@ public:
     void setDebugLogs(bool enable);
 
     /**
-     * @brief Selects a CPU and GPU device from the available OpenCL platforms. When selected, initializes the corresponding OpenCL 
+     * @brief Selects a CPU and GPU device from the available OpenCL platforms. When selected, initializes the corresponding OpenCL
      * contexts and command queues for both devices.
-     * If something goes wrong during platform/device selection, a detailed error message is printed to stderr and a runtime_error 
+     * If something goes wrong during platform/device selection, a detailed error message is printed to stderr and a runtime_error
      * exception is thrown.
      */
     void selectPlatformsAndDevices();
@@ -120,6 +119,26 @@ public:
     void setBuildOptions(const std::string &options, DeviceType device_type);
 
     /**
+     * @brief Checks if the CPU and GPU devices supports coarse-grained buffer SVM in OpenCL 3.0.
+     *
+     * @throws runtime_error if one of the devices doesn't support this feature
+     */
+    void checkDevicesSVMCapabilities();
+
+    /**
+     * @brief Checks if the device supports the double data type.
+     *
+     * @return True if the device supports double, false otherwise.
+     */
+    bool checkDeviceForDoubleSupport(DeviceType device_type);
+
+    /**
+     * @brief Add the atomics header containing the atomics types definition, functions signatures and
+     * extensions handling for atomics handling.
+     */
+    void injectAtomicsHeader(std::string &code);
+
+    /**
      * @brief Creates and builds an OpenCL program from the given program code string. The build options are used during the build process.
      * If something goes wrong during the build, a detailed error message is printed to stderr and a runtime_error exception is thrown.
      *
@@ -136,17 +155,6 @@ public:
      * @return The created OpenCL program.
      */
     cl::Program createProgram(const char *program_code, DeviceType device_type);
-    /**
-     * @deprecated This function is deprecated and is not recommended for use. I left it here just in case, but it may be removed in 
-     * future versions.
-     *
-     * @brief Creates an OpenCL program by reading the kernel code from the specified file. Same behavior as createProgram(std::string &).
-     *
-     * @param file_name The name of the file containing the OpenCL kernel code.
-     * @param device_type The type of device where the program will be executed (CPU or GPU).
-     * @return The created OpenCL program.
-     */
-    cl::Program createProgramFromFile(const char *file_name, DeviceType device_type);
 
     /**
      * @brief Creates an OpenCL kernel from the given program and kernel name.
@@ -219,17 +227,17 @@ public:
      * @brief Maps a shared virtual memory (SVM) pointer to ensure it is properly synchronized and can be safely accessed by the host.
      * This is necessary before the host can read from or write to the SVM memory. This method is blocking and will wait until the mapping
      * is complete.
-     * 
+     *
      * @param host_ptr Pointer to the SVM memory to map.
      * @param size The size of the SVM memory to map in bytes.
      * @param device_type The type of device for which the SVM region was created (CPU or GPU).
      */
     void mapSVM(void *host_ptr, size_t size, DeviceType device_type) const;
     /**
-     * @brief Unmaps a shared virtual memory (SVM) pointer after the host has finished accessing it. 
+     * @brief Unmaps a shared virtual memory (SVM) pointer after the host has finished accessing it.
      * This tells OpenCL that the host is done with the SVM and OpenCL can now owns this memory region to be accessed by the device
      * in parallel.
-     * 
+     *
      * @param host_ptr Pointer to the SVM memory to unmap.
      * @param device_type The type of device for which the SVM region was created (CPU or GPU).
      */
@@ -238,7 +246,7 @@ public:
     /**
      * @brief Synchronizes the OpenCL command queue for the specified device type, ensuring that all previously enqueued commands
      * have completed before proceeding.
-     * 
+     *
      * @param device_type The type of device for which to synchronize the command queue (CPU or GPU).
      */
     void synchronize(DeviceType device_type) const;

@@ -99,3 +99,21 @@ add_custom_command(TARGET bmp_nifs POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:bmp_nifs>" "${CMAKE_SOURCE_DIR}/priv/$<TARGET_FILE_NAME:bmp_nifs>"
     COMMENT "Copying bmp_nifs to priv/ directory..."
 )
+
+# ---- Copy atomics definitions to 'priv' folder too ----
+
+# Tell CMake how to generate the file in the priv folder
+add_custom_command(
+    OUTPUT "${CMAKE_SOURCE_DIR}/priv/Orchestra.Atomics.cl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/priv"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+        "${CMAKE_CURRENT_SOURCE_DIR}/c_src/Orchestra.Atomics.cl" 
+        "${CMAKE_SOURCE_DIR}/priv/Orchestra.Atomics.cl"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/c_src/Orchestra.Atomics.cl"
+    COMMENT "Copying Orchestra.Atomics.cl to priv/ directory..."
+)
+
+# Create a target that depends on that output file so it triggers during the build
+add_custom_target(copy_cl_files ALL 
+    DEPENDS "${CMAKE_SOURCE_DIR}/priv/Orchestra.Atomics.cl"
+)

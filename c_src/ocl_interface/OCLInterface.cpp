@@ -19,6 +19,9 @@ OCLInterface::OCLInterface(bool enable_debug_logs)
 
     this->build_options_gpu = "";
     this->debug_logs = enable_debug_logs;
+
+    // Reads atomics header from the OpenCL C file
+    this->atomics_header = this->read_file("priv/Orchestra.Atomics.cl");
 }
 
 OCLInterface::~OCLInterface()
@@ -40,26 +43,32 @@ void OCLInterface::setDebugLogs(bool enable)
     this->debug_logs = enable;
 }
 
-// This function is deprecated.
-std::string OCLInterface::getKernelCode(const char *file_name)
+std::string OCLInterface::read_file(const std::string& filepath)
 {
-    std::ifstream kernel_file(file_name);
-    std::string output, line;
-
-    if (!kernel_file.is_open())
-    {
-        std::cerr << "[OCL C++ Interface] Unable to open kernel file '" << file_name << "'." << std::endl;
-        throw std::runtime_error("Kernel file not found");
+    // Open file in binary mode at the end of the file (ate)
+    std::ifstream file(filepath, std::ios::ate | std::ios::binary);
+    
+    if (!file.is_open()) {
+        throw std::runtime_error("[OCLInterface] Could not open file: " + filepath);
     }
+    
+    // Get the file size
+    auto size = file.tellg();
+    
+    // Create a string of that size
+    std::string result;
+    result.resize(size);
+    
+    // Jump back to the beginning
+    file.seekg(0, std::ios::beg);
+    
+    // Read directly into the string's internal buffer
+    file.read(result.data(), size);
 
-    while (std::getline(kernel_file, line))
-    {
-        output += line += "\n";
-    }
-
-    kernel_file.close();
-
-    return output;
+    // Close file
+    file.close();
+    
+    return result;
 }
 
 void OCLInterface::selectPlatformsAndDevices()
@@ -69,7 +78,8 @@ void OCLInterface::selectPlatformsAndDevices()
     cl::Platform::get(&platforms);
 
     // Now we can iterate over the platforms and look for GPU and CPU devices.
-    // I'll be selecting the first GPU and CPU devices I find, but we could implement something more robust in the future.
+    // I'll be selecting the first GPU and CPU devices I find, but we could
+    // implement something more robust in the future.
 
     bool gpu_found = false, cpu_found = false;
     std::vector<cl::Device> devices;
@@ -162,6 +172,38 @@ void OCLInterface::setBuildOptions(const std::string &options, OCLInterface::Dev
     }
 }
 
+void OCLInterface::checkDevicesSVMCapabilities()
+{
+    // We are using OpenCL 3.0 and SVM is an optional feature in this version. We need to check
+    // if both devices support coarse-grained SVM buffers
+    cl_device_svm_capabilities cpu_svm_cap = this->cpu.getInfo<CL_DEVICE_SVM_CAPABILITIES>();
+    cl_device_svm_capabilities gpu_svm_cap = this->gpu.getInfo<CL_DEVICE_SVM_CAPABILITIES>();
+
+    if (!(cpu_svm_cap & CL_DEVICE_SVM_COARSE_GRAIN_BUFFER))
+    {
+        throw std::runtime_error("[OCLInterface] CPU device doesn't coarse-grained SVM buffers. This feature is required.");
+    }
+
+    if (!(gpu_svm_cap & CL_DEVICE_SVM_COARSE_GRAIN_BUFFER))
+    {
+        throw std::runtime_error("[OCLInterface] GPU device doesn't coarse-grained SVM buffers. This feature is required.");
+    }
+}
+
+bool OCLInterface::checkDeviceForDoubleSupport(DeviceType device_type)
+{
+    cl::Device &d = (device_type == DeviceType::CPU) ? this->cpu : this->gpu;
+
+    cl_device_fp_config fp_config = d.getInfo<CL_DEVICE_DOUBLE_FP_CONFIG>();
+
+    return fp_config != 0;
+}
+
+void OCLInterface::injectAtomicsHeader(std::string &code)
+{
+    code = this->atomics_header + code;
+}
+
 cl::Program OCLInterface::createProgram(std::string &program_code, OCLInterface::DeviceType device_type)
 {
     cl::Context &context = (device_type == DeviceType::GPU) ? this->gpu_context : this->cpu_context;
@@ -200,12 +242,6 @@ cl::Program OCLInterface::createProgram(std::string &program_code, OCLInterface:
 cl::Program OCLInterface::createProgram(const char *program_code, OCLInterface::DeviceType device_type)
 {
     std::string code_str(program_code);
-    return this->createProgram(code_str, device_type);
-}
-
-cl::Program OCLInterface::createProgramFromFile(const char *file_name, OCLInterface::DeviceType device_type)
-{
-    std::string code_str = this->getKernelCode(file_name);
     return this->createProgram(code_str, device_type);
 }
 
