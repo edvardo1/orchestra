@@ -1,7 +1,5 @@
 require Orchestra
 
-Orchestra.set_debug_logs(true)
-
 Orchestra.defmodule Atomics_2 do
   defd atomic_add_d(atomic(counter), val) do
     return atomic_add_int(counter, val)
