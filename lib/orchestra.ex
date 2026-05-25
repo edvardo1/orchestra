@@ -151,6 +151,7 @@ defmodule Orchestra do
     new_c =
       case c do
         {:=, _, [left, right]} -> {:=, [], [left, process_with_exp(right, ctx)]}
+        {:{}, _, args} -> {:{}, [], Enum.map(args, fn el -> process_with_exp(el, ctx) end)}
         _ -> process_with_exp(c, ctx)
       end
 
