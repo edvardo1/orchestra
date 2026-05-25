@@ -693,7 +693,6 @@ defmodule Orchestra do
     # 'args' is a list of the actual arguments passed to the kernel, processed to remove any function references
     args = process_args_no_fun(l)
 
-
     # FIRST, we need to infer the signature types of all functions used in the kernel (return type and args types)
     # This is needed to correctly infer the types of the kernel's internal variables and parameters, since they may depend on the return
     # types of the functions used within the kernel.
@@ -714,117 +713,120 @@ defmodule Orchestra do
     # of the kernel parameters, so when we infer the types of the kernel, it can use both the types of the kernel parameters and the types
     # of the device functions used within the kernel.
     delta = Map.merge(delta, new_delta)
-    #map_key = {kernel_name, subs, delta, ctx.device}
-    map_key = {kernel_name, delta, ctx.device}
 
+    map_key = {kernel_name, delta, ctx.device}
     send(:module_server, {:get_kernel, map_key, self()})
-    {kernel_res, types_args} = receive do
-      {:kernel, nil} ->
-        # Infers the types of the kernel's variables and functions based on the AST and the new delta map
-        inf_types =
-          case JIT.infer_types(kast, delta, kernel_name) do
-            {:ok, types} -> types
-            {:error, _types, reason} -> raise "Type inference failed: #{reason}"
+
+    {kernel_res, types_args} =
+      receive do
+        {:kernel, nil} ->
+          # Infers the types of the kernel's variables and functions based on the AST and the new delta map
+          inf_types =
+            case JIT.infer_types(kast, delta, kernel_name) do
+              {:ok, types} -> types
+              {:error, _types, reason} -> raise "Type inference failed: #{reason}"
+            end
+
+          # Check if the inferred types contain 'double' or 'tdouble' types
+          contains_double =
+            Map.values(inf_types) |> Enum.any?(fn x -> x == :double or x == :tdouble end)
+
+          # If double precision is used, check if the device supports it.
+          if contains_double and not double_supported_nif(ctx.device) do
+            raise "[Orchestra] Your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
           end
 
-        # Check if the inferred types contain 'double' or 'tdouble' types
-        contains_double =
-          Map.values(inf_types) |> Enum.any?(fn x -> x == :double or x == :tdouble end)
+          # Returns a map of formal parameters that are functions and their actual names in OpenCL code.
+          # This is needed so JIT.compile_kernel can replace the function parameters with their actual names in
+          # the generated OpenCL code.
+          subs = JIT.get_function_parameters(kast, l)
 
-        # If double precision is used, check if the device supports it.
-        if contains_double and not double_supported_nif(ctx.device) do
-          raise "[Orchestra] Your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
-        end
+          # Compiles the kernel AST into a string representation of the OpenCL code. The inferred types are used
+          # to generate the correct OpenCL types for all the kernel internal variables and parameters.
+          # The `subs` map is used to replace function parameters with their actual device function names in the generated code.
+          kernel = JIT.compile_kernel(kast, inf_types, subs)
 
-        # Returns a map of formal parameters that are functions and their actual names in OpenCL code.
-        # This is needed so JIT.compile_kernel can replace the function parameters with their actual names in
-        # the generated OpenCL code.
-        subs = JIT.get_function_parameters(kast, l)
+          # Here we are getting a list of tuples {actual_function_param, type} for all formal parameters that are functions.
+          # This is needed because we will compile these functions and their type signatures will be used as their initial delta type map.
+          funs = JIT.get_function_parameters_and_their_types(kast, l, inf_types)
 
-        # Compiles the kernel AST into a string representation of the OpenCL code. The inferred types are used
-        # to generate the correct OpenCL types for all the kernel internal variables and parameters.
-        # The `subs` map is used to replace function parameters with their actual device function names in the generated code.
-        kernel = JIT.compile_kernel(kast, inf_types, subs)
+          # Takes the function graph and the kernel final inferred types and creates a list of tuples where each tuple contains
+          # a function name and its inferred type signature. This is used to compile the functions that are not directly
+          # passed as arguments to the kernel, but are used within the kernel.
+          # The kernel final inferred types contains the inferred types of these functions because during the kernel type inference
+          # their type is updated. So if the type was incomplete before (e.g. just the return type was inferred), by the end of the kernel
+          # inference their type should be complete (return type and args types) =D
+          # I'm using the fun_graph_asts because its ordered according to dependencies
+          other_funs =
+            funs_graph_asts
+            |> Enum.map(fn {x, _ast} -> {x, inf_types[x]} end)
+            # Remove functions that could not be inferred
+            |> Enum.filter(fn {_, i} -> i != nil end)
 
-        # Here we are getting a list of tuples {actual_function_param, type} for all formal parameters that are functions.
-        # This is needed because we will compile these functions and their type signatures will be used as their initial delta type map.
-        funs = JIT.get_function_parameters_and_their_types(kast, l, inf_types)
+          # Compiles all functions (both those passed as arguments and those used within the kernel) with the latest inferred types
+          all_funs = other_funs ++ funs
 
-        # Takes the function graph and the kernel final inferred types and creates a list of tuples where each tuple contains
-        # a function name and its inferred type signature. This is used to compile the functions that are not directly
-        # passed as arguments to the kernel, but are used within the kernel.
-        # The kernel final inferred types contains the inferred types of these functions because during the kernel type inference
-        # their type is updated. So if the type was incomplete before (e.g. just the return type was inferred), by the end of the kernel
-        # inference their type should be complete (return type and args types) =D
-        # I'm using the fun_graph_asts because its ordered according to dependencies
-        other_funs =
-          funs_graph_asts
-          |> Enum.map(fn {x, _ast} -> {x, inf_types[x]} end)
-          # Remove functions that could not be inferred
-          |> Enum.filter(fn {_, i} -> i != nil end)
+          # The JIT.compile_function/2 function compiles the provided function AND it's dependencies (other functions called within
+          # a function). To avoid recompiling functions that were already compiled, we provide a MapSet of already compiled functions,
+          # so the JIT.compile_function/2 can check and skip a function if necessary.
+          {comp, _compiled_funs} =
+            Enum.reduce(all_funs, {[], MapSet.new()}, fn fun, {code_acc, compiled_funs_acc} ->
+              {new_code, compiled_funs_acc} = JIT.compile_function(fun, compiled_funs_acc)
+              {code_acc ++ new_code, compiled_funs_acc}
+            end)
 
-        # Compiles all functions (both those passed as arguments and those used within the kernel) with the latest inferred types
-        all_funs = other_funs ++ funs
+          # The `JIT.get_includes/0` function returns a list of OpenCL code that
+          # will be prepended to the generated kernel code.
+          includes = JIT.get_includes()
+          prog = [includes | comp] ++ [kernel]
 
-        # The JIT.compile_function/2 function compiles the provided function AND it's dependencies (other functions called within
-        # a function). To avoid recompiling functions that were already compiled, we provide a MapSet of already compiled functions,
-        # so the JIT.compile_function/2 can check and skip a function if necessary.
-        {comp, _compiled_funs} =
-          Enum.reduce(all_funs, {[], MapSet.new()}, fn fun, {code_acc, compiled_funs_acc} ->
-            {new_code, compiled_funs_acc} = JIT.compile_function(fun, compiled_funs_acc)
-            {code_acc ++ new_code, compiled_funs_acc}
-          end)
+          # Here we are concatenating the generated OpenCL code into a single string.
+          prog = Enum.reduce(prog, "", fn x, y -> y <> x end)
 
-        # The `JIT.get_includes/0` function returns a list of OpenCL code that
-        # will be prepended to the generated kernel code.
-        includes = JIT.get_includes()
-        prog = [includes | comp] ++ [kernel]
+          # Print the generated OpenCL code for debugging purposes if debug logs is enabled.
+          debug_logs = Agent.get(:debug_logs_agent, fn state -> state end)
 
-        # Here we are concatenating the generated OpenCL code into a single string.
-        prog = Enum.reduce(prog, "", fn x, y -> y <> x end)
+          if debug_logs do
+            IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
 
-        # Print the generated OpenCL code for debugging purposes if debug logs is enabled.
-        debug_logs = Agent.get(:debug_logs_agent, fn state -> state end)
+            IO.puts(prog)
 
-        if debug_logs do
-          IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
+            IO.puts("==============================================================")
+          end
 
-          IO.puts(prog)
+          # 'types_args' is a list of the inferred types of the actual arguments passed to the kernel (excluding functions).
+          types_args = JIT.get_types_para(kast, inf_types)
 
-          IO.puts("==============================================================")
-        end
+          # Compile the kernel with the JIT compiler and get a reference to the compiled kernel that can be used to launch it
+          kernel_res =
+            jit_compile_nif(
+              Kernel.to_charlist(kernel_name),
+              Kernel.to_charlist(prog),
+              ctx.device
+            )
 
-        # 'types_args' is a list of the inferred types of the actual arguments passed to the kernel (excluding functions).
-        types_args = JIT.get_types_para(kast, inf_types)
+          # We store this compiled kernel reference and it's types_args in the module server, so we can
+          # cache it and reuse it in future executions of the same kernel with the same types, avoiding recompilation
+          send(:module_server, {:add_kernel, map_key, {kernel_res, types_args}})
 
-        #jit_compile_and_launch_nif(
-        #  Kernel.to_charlist(kernel_name),
-        #  Kernel.to_charlist(prog),
-        #  b,
-        #  t,
-        #  length(args),
-        #  types_args,
-        #  args,
-        #  ctx.device
-        #)
-        kernel_res = jit_compile_nif(
-          Kernel.to_charlist(kernel_name),
-          Kernel.to_charlist(prog),
-          ctx.device
-        )
-        send(:module_server, {:set_ptx, map_key, {kernel_res, types_args}})
-        {kernel_res, types_args}
-      {:kernel, {kernel_res, types_args}} ->
-        {kernel_res, types_args}
-    end
+          {kernel_res, types_args}
 
+        {:kernel, {kernel_res, types_args}} ->
+          {kernel_res, types_args}
+      end
+
+    # Now with the kernel reference and the types of the arguments, we can launch the kernel
     jit_launch_nif(kernel_res, b, t, length(args), types_args, args, ctx.device)
 
     case ctx.device do
       # We need to map the Nx tensors before returning so Elixir can access their data again
-      :cpu -> map_all_nx_tensors(l)
-      # In a GPU context, we don't need to do anything after launching the kernel
-      :gpu -> :ok
+      :cpu ->
+        map_all_nx_tensors(l)
+        :ok
+
+      # In a GPU context, we don't need to do anything after launching the kernel, just return
+      :gpu ->
+        :ok
     end
   end
 
@@ -905,6 +907,7 @@ defmodule Orchestra do
     :erlang.nif_error(:nif_not_loaded)
   end
 
+  @deprecated "This function is deprecated because now we have a caching mechanism for compiled kernels. Use jit_compile_nif and jit_launch_nif instead."
   def jit_compile_and_launch_nif(_n, _k, _grid, _threads, _size, _types, _l, _d) do
     :erlang.nif_error(:nif_not_loaded)
   end

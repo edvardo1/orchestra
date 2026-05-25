@@ -661,7 +661,7 @@ defmodule JIT do
         send(pid, {:kernel, kernels_map[kernel_key]})
         module_server(types_map, ast_map, kernels_map)
 
-      {:set_kernel, kernel_key, kernel} ->
+      {:add_kernel, kernel_key, kernel} ->
         module_server(types_map, ast_map, Map.put(kernels_map, kernel_key, kernel))
 
       {:kill} ->

@@ -265,7 +265,7 @@ public:
         }
     }
 
-    cl_uint getCPUAlignmentBytes() const
+    inline cl_uint getCPUAlignmentBytes() const
     {
         return cpu_alignment_bytes;
     }

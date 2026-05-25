@@ -2,7 +2,7 @@
     This file implements the Native Implemented Functions (NIFs) for GPU operations using OpenCL
     in Elixir.
 
-    Ported to OpenCL/C++ by: Henrique Gabriel Rodrigues
+    Ported to OpenCL/C++ by: Henrique Gabriel Rodrigues, Eduardo Mailan
     Oriented and supervised by: Prof. Dr. André Rauber Du Bois
     Original code by: Prof. Dr. André Rauber Du Bois
 
@@ -77,6 +77,23 @@ void cpu_svm_destructor(ErlNifEnv * /* env */, void *res)
   }
 }
 
+// Destructor for kernel resource (cl::Kernel)
+void kernel_destructor(ErlNifEnv * /* env */, void *res)
+{
+  cl::Kernel *kernel = (cl::Kernel *)res;
+
+  // Explicitly call the destructor for the cl::Kernel object without deallocating
+  // the resource memory itself (the memory where the pointer to cl::Kernel is stored).
+  // This is Erlang's garbage collector responsibility, and if we do this we'll get a
+  // deallocation error.
+  kernel->~Kernel();
+
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] Kernel resource destroyed." << std::endl;
+  }
+}
+
 // This function initializes the OpenCL interface, selects the default platform, GPU device,
 // and checks for required extension support.
 void init_ocl(ErlNifEnv *env)
@@ -137,7 +154,7 @@ static int load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_in
       env,
       NULL,
       "kernel_ref",
-      NULL, /* @todo add kernel destructor */
+      kernel_destructor,
       ERL_NIF_RT_CREATE,
       NULL);
 
@@ -184,6 +201,12 @@ inline OCLInterface::DeviceType get_device_type(ERL_NIF_TERM e_device_type, ErlN
 }
 
 // This function compiles the given kernel code and returns the kernel as a resource
+// Parameters:
+// 1 - Kernel name as a charlist
+// 2 - Kernel code as a charlist
+// 3 - Device type as an atom ('gpu' or 'cpu')
+// Returns:
+// - On success: A resource containing the compiled kernel
 static ERL_NIF_TERM jit_compile_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   // Check argc
@@ -212,9 +235,6 @@ static ERL_NIF_TERM jit_compile_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM
     return enif_make_badarg(env);
   }
 
-  ERL_NIF_TERM e_device_type = argv[2];
-  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
-
   std::string code(size_code, '\0');
   enif_get_string(env, e_code, code.data(), size_code + 1, ERL_NIF_LATIN1);
 
@@ -224,43 +244,55 @@ static ERL_NIF_TERM jit_compile_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM
   // - Henrique
   open_cl->injectAtomicsHeader(code);
 
-  // Creating program and kernel objects
-  cl::Program program;
+  // Getting device type (GPU or CPU). It is the last argument.
+  ERL_NIF_TERM e_device_type = argv[2];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
+  // Allocating memory inside BEAM to hold the cl::Kernel object.
   void *raw_memory = enif_alloc_resource(KERNEL_TYPE, sizeof(cl::Kernel));
   cl::Kernel *kernel = new (raw_memory) cl::Kernel();
 
-  // Getting device type (GPU or CPU). It is the last argument.
-
   try
   {
-    program = open_cl->createProgram(code, device_type);
+    cl::Program program = open_cl->createProgram(code, device_type);
     *kernel = open_cl->createKernel(program, kernel_name.c_str());
   }
   catch (const std::exception &e)
   {
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
-  ERL_NIF_TERM kernelResource = enif_make_resource(env, kernel);
 
+  ERL_NIF_TERM kernel_resource = enif_make_resource(env, kernel);
   enif_release_resource(kernel);
 
-  return kernelResource;
+  return kernel_resource;
 }
 
-static ERL_NIF_TERM jit_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+// Launch a previously compiled kernel with the specified blocks, threads, and arguments.
+// Parameters:
+// 1 - Kernel resource (compiled kernel)
+// 2 - Blocks as a tuple of three integers (x, y, z)
+// 3 - Threads as a tuple of three integers (x, y, z)
+// 4 - Number of arguments
+// 5 - Types of arguments
+// 6 - Arguments
+// 7 - Device type as an atom ('gpu' or 'cpu')
+static ERL_NIF_TERM jit_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
   // Check argc
   if (argc != 7)
   {
-    std::cerr << "[ERROR] Invalid number of arguments for jit_compile_nif." << std::endl;
+    std::cerr << "[ERROR] Invalid number of arguments for jit_launch_nif." << std::endl;
     return enif_make_badarg(env);
   }
 
-  cl::Kernel *kernel = NULL;
+  cl::Kernel *kernel = nullptr;
 
-  if (!enif_get_resource(env, argv[0], KERNEL_TYPE, (void **)&kernel)) {
+  if (!enif_get_resource(env, argv[0], KERNEL_TYPE, (void **)&kernel))
+  {
     return enif_make_badarg(env);
   }
-  std::string kernel_name = "wow awesome name";
+  std::string kernel_name = kernel->getInfo<CL_KERNEL_FUNCTION_NAME>();
 
   // Getting blocks and threads tuples pointers
   const ERL_NIF_TERM *tuple_blocks, *tuple_threads;
@@ -487,7 +519,11 @@ static ERL_NIF_TERM jit_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   return enif_make_int(env, 0);
 }
 
-// This function compiles the given kernel code and launches it with the specified blocks and threads.
+/**
+ * @deprecated This function was deprecated because now we have a mechanism of kernel caching.
+ * 
+ * Use jit_compile_nif to compile the kernel and jit_launch_nif to launch it.
+ */
 static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   // Check argc
@@ -765,7 +801,8 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   return enif_make_int(env, 0);
 }
 
-// This function retrieves the OpenCL array from the device (GPU/CPU) and returns it to the host as an Erlang term.
+// This function retrieves the OpenCL array from the device (GPU) and returns it to the host as an Erlang term
+// with aligned memory.
 static ERL_NIF_TERM get_device_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
   cl::Buffer *device_array = nullptr;
@@ -828,41 +865,43 @@ static ERL_NIF_TERM get_device_array_nif(ErlNifEnv *env, int /* argc */, const E
   ERL_NIF_TERM e_device_type = argv[4];
   OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
 
-  // Allocate memory in the host to store the result
-  // According to Erlang's docs, for LARGE binaries, it is better to use enif_alloc_binary.
-  ErlNifBinary host_bin;
-
-  if (!enif_alloc_binary(data_size, &host_bin))
-  {
-    char message[200];
-    strcpy(message, "[ERROR] (get_device_array_nif) failed to allocate binary of size ");
-    strcat(message, std::to_string(data_size).c_str());
-    return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-  }
-
-  // Getting pointer to the allocated binary data in the host
-  void *result_data_pointer = (void *)host_bin.data;
-
-  // Copying data from device to host
   try
   {
-    open_cl->readBuffer(*device_array, result_data_pointer, data_size, device_type);
+    // Allocate ALIGNED memory in the host to hold the data (all Orchestra tensors are aligned!)
+    // We do not intend to use SVM for GPU computations, because we are already using cl::Buffer for this.
+    void *aligned_mem = open_cl->createSVM(data_size, OCLInterface::DeviceType::CPU);
+
+    // Copying data from device to host
+    open_cl->readBuffer(*device_array, aligned_mem, data_size, device_type);
 
     if (debug_logs)
     {
       std::cout << "[C++ GPU NIF] Retrieved device array with " << nrow << " rows and " << ncol << " columns." << std::endl;
-      std::cout << "[C++ GPU NIF] Data copied from device to host successfully." << std::endl;
+      std::cout << "[C++ GPU NIF] Data copied from device to host successfully in an aligned SVM." << std::endl;
     }
+
+    // Allocate an Erlang resource to hold the pointer to the SVM memory.
+    void **svm_res = (void **)enif_alloc_resource(CPU_SVM_TYPE, sizeof(void *));
+
+    // Store the pointer to the aligned SVM memory in the resource
+    *svm_res = aligned_mem;
+
+    // Creating an Erlang Resource Binary to point directly to the SVM memory
+    // An Erlang Resource Binary will behave like a normal binary in Elixir, but its data pointer will point
+    // to the aligned SVM memory OpenCL allocated for us. And when the BEAM garbage collects the Resource Binary,
+    // it will call the cpu_svm_destructor we defined, which will free the SVM memory correctly using OpenCL's API.
+    ERL_NIF_TERM resource_bin = enif_make_resource_binary(env, (void *)svm_res, aligned_mem, data_size);
+
+    // Release the resource handle letting the BEAM manage its lifetime
+    enif_release_resource(svm_res);
+
+    return resource_bin;
   }
   catch (const std::exception &e)
   {
     std::cerr << "[ERROR] (get_device_array_nif) copying data from device to host: " << e.what() << std::endl;
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
-
-  // Creating the Erlang binary term to return (passing ownership to the BEAM)
-  ERL_NIF_TERM erl_term_result = enif_make_binary(env, &host_bin);
-  return erl_term_result;
 }
 
 // This function creates a new GPU array with the specified number of rows, columns, and type.
@@ -1361,6 +1400,8 @@ static ERL_NIF_TERM new_empty_aligned_nx_nif(ErlNifEnv *env, int argc, const ERL
   }
 }
 
+// This function checks if the pointer of the binary passed as an argument is aligned according to the
+// alignment requirements of the CPU for SVM memory.
 static ERL_NIF_TERM is_nx_aligned_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   if (argc != 1)
