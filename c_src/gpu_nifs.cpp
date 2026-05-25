@@ -31,6 +31,8 @@ OCLInterface *open_cl = nullptr;
 ErlNifResourceType *ARRAY_TYPE;
 // Global resource type for aligned host memory (pinned memory for efficient transfers)
 ErlNifResourceType *CPU_SVM_TYPE;
+// Global resource type for kernels
+ErlNifResourceType *KERNEL_TYPE;
 
 // Destructor for device array resource (cl::Buffer)
 void dev_array_destructor(ErlNifEnv * /* env */, void *res)
@@ -131,6 +133,14 @@ static int load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_in
       ERL_NIF_RT_CREATE,
       NULL);
 
+  KERNEL_TYPE = enif_open_resource_type(
+      env,
+      NULL,
+      "kernel_ref",
+      NULL, /* @todo add kernel destructor */
+      ERL_NIF_RT_CREATE,
+      NULL);
+
   // Initialize OpenCL interface
   init_ocl(env);
 
@@ -171,6 +181,310 @@ inline OCLInterface::DeviceType get_device_type(ERL_NIF_TERM e_device_type, ErlN
     std::cerr << "[ERROR] Invalid device type. Expected 'gpu' or 'cpu'." << std::endl;
     throw std::invalid_argument("Invalid device type");
   }
+}
+
+// This function compiles the given kernel code and returns the kernel as a resource
+static ERL_NIF_TERM jit_compile_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+  // Check argc
+  if (argc != 3)
+  {
+    std::cerr << "[ERROR] Invalid number of arguments for jit_compile_nif." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  // Get kernel name
+  ERL_NIF_TERM e_name = argv[0];
+  unsigned int size_name;
+  if (!enif_get_list_length(env, e_name, &size_name))
+  {
+    return enif_make_badarg(env);
+  }
+
+  std::string kernel_name(size_name, '\0');
+  enif_get_string(env, e_name, kernel_name.data(), size_name + 1, ERL_NIF_LATIN1);
+
+  // Get kernel code to compile
+  ERL_NIF_TERM e_code = argv[1];
+  unsigned int size_code;
+  if (!enif_get_list_length(env, e_code, &size_code))
+  {
+    return enif_make_badarg(env);
+  }
+
+  ERL_NIF_TERM e_device_type = argv[2];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
+  std::string code(size_code, '\0');
+  enif_get_string(env, e_code, code.data(), size_code + 1, ERL_NIF_LATIN1);
+
+  // Injecting atomics definitions and functions
+  // Currently, we're injecting this stuff no matter if the kernel makes
+  // use of atomics or not. I don't know if this is a big deal or not.
+  // - Henrique
+  open_cl->injectAtomicsHeader(code);
+
+  // Creating program and kernel objects
+  cl::Program program;
+  void *raw_memory = enif_alloc_resource(KERNEL_TYPE, sizeof(cl::Kernel));
+  cl::Kernel *kernel = new (raw_memory) cl::Kernel();
+
+  // Getting device type (GPU or CPU). It is the last argument.
+
+  try
+  {
+    program = open_cl->createProgram(code, device_type);
+    *kernel = open_cl->createKernel(program, kernel_name.c_str());
+  }
+  catch (const std::exception &e)
+  {
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+  ERL_NIF_TERM kernelResource = enif_make_resource(env, kernel);
+
+  enif_release_resource(kernel);
+
+  return kernelResource;
+}
+
+static ERL_NIF_TERM jit_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  // Check argc
+  if (argc != 7)
+  {
+    std::cerr << "[ERROR] Invalid number of arguments for jit_compile_nif." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  cl::Kernel *kernel = NULL;
+
+  if (!enif_get_resource(env, argv[0], KERNEL_TYPE, (void **)&kernel)) {
+    return enif_make_badarg(env);
+  }
+  std::string kernel_name = "wow awesome name";
+
+  // Getting blocks and threads tuples pointers
+  const ERL_NIF_TERM *tuple_blocks, *tuple_threads;
+  int arity;
+
+  if (!enif_get_tuple(env, argv[1], &arity, &tuple_blocks))
+  {
+    std::cerr << "[ERROR] The given blocks argument is not a tuple." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  if (arity != 3)
+  {
+    std::cerr << "[ERROR] The blocks tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  if (!enif_get_tuple(env, argv[2], &arity, &tuple_threads))
+  {
+    std::cerr << "[ERROR] The given threads argument is not a tuple." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  if (arity != 3)
+  {
+    std::cerr << "[ERROR] The threads tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  // Extracting the number of blocks and threads from the tuples
+  int blocks[3], threads[3];
+
+  for (int i = 0; i < 3; i++)
+  {
+    enif_get_int(env, tuple_blocks[i], blocks + i);
+    enif_get_int(env, tuple_threads[i], threads + i);
+  }
+
+  ERL_NIF_TERM e_device_type = argv[6];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
+  // Creating NDRange objects for local and global range
+  cl::NDRange global_range, local_range;
+
+  // If the user wants OpenCL to calculate the number of threads automatically, Elixir will set the threads tuple to {0, 0, 0}.
+  // This is the only case where the threads tuple can contain zero, so we can check only if the first element is zero.
+  bool let_opencl_decide_local_range = (threads[0] == 0);
+
+  if (let_opencl_decide_local_range)
+  {
+    // Let OpenCL decide the local range (work-group size)
+    local_range = cl::NullRange;
+    // In this case, the grid size will have to contain the global range
+    global_range = cl::NDRange(blocks[0], blocks[1], blocks[2]);
+  }
+  else
+  {
+    local_range = cl::NDRange(threads[0], threads[1], threads[2]);
+    global_range = cl::NDRange(blocks[0] * threads[0], blocks[1] * threads[1], blocks[2] * threads[2]);
+  }
+
+  if (debug_logs)
+  {
+    if (let_opencl_decide_local_range)
+    {
+      std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' will be executed with a global range of "
+                << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
+                << " and an automatically determined local range." << std::endl;
+    }
+    else
+    {
+      std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' will be executed with a global range of "
+                << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
+                << " and a local range of " << local_range[0] << "x" << local_range[1]
+                << "x" << local_range[2] << "." << std::endl;
+    }
+  }
+
+  // Getting the number of arguments given to the kernel
+  int size_args;
+
+  if (!enif_get_int(env, argv[3], &size_args))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Collecting the arguments and their types
+  ERL_NIF_TERM list_args_types;
+  ERL_NIF_TERM head_args_types;
+  ERL_NIF_TERM tail_args_types;
+
+  ERL_NIF_TERM list_args;
+  ERL_NIF_TERM head_args;
+  ERL_NIF_TERM tail_args;
+
+  list_args_types = argv[4];
+  list_args = argv[5];
+
+  for (int i = 0; i < size_args; i++)
+  {
+    ERL_NIF_TERM arg;
+    char arg_type_name[1024];
+    unsigned int arg_type_name_lenght;
+
+    // Get first element of the list of types
+    if (!enif_get_list_cell(env, list_args_types, &head_args_types, &tail_args_types))
+    {
+      std::cerr << "[ERROR] Error getting list cell for kernel argument types." << std::endl;
+      return enif_make_badarg(env);
+    }
+
+    // Get length of the type name
+    if (!enif_get_list_length(env, head_args_types, &arg_type_name_lenght))
+    {
+      std::cerr << "[ERROR] Error getting type name length for kernel argument types." << std::endl;
+      return enif_make_badarg(env);
+    }
+
+    // Get the type name as a string
+    enif_get_string(env, head_args_types, arg_type_name, arg_type_name_lenght + 1, ERL_NIF_LATIN1);
+
+    // Get first element of the list of arguments
+    // This is the actual argument that will be passed to the kernel
+    if (!enif_get_list_cell(env, list_args, &head_args, &tail_args))
+    {
+      std::cerr << "[ERROR] Error getting list cell for kernel argument " << i << "." << std::endl;
+      return enif_make_badarg(env);
+    }
+    arg = head_args;
+
+    // Now that we have the argument and its type name
+    // We can convert the argument to the appropriate type and set it in the kernel object
+    if (strcmp(arg_type_name, "int") == 0)
+    {
+      int iarg;
+      if (!enif_get_int(env, arg, &iarg))
+      {
+        std::cerr << "[ERROR] Error getting integer argument for kernel." << std::endl;
+        return enif_make_badarg(env);
+      }
+
+      kernel->setArg(i, iarg);
+    }
+    else if (strcmp(arg_type_name, "float") == 0)
+    {
+      double darg;
+      if (!enif_get_double(env, arg, &darg))
+      {
+        std::cerr << "[ERROR] Error getting float argument for kernel." << std::endl;
+        return enif_make_badarg(env);
+      }
+
+      float farg = static_cast<float>(darg);
+      kernel->setArg(i, farg);
+    }
+    else if (strcmp(arg_type_name, "double") == 0)
+    {
+      double darg;
+      if (!enif_get_double(env, arg, &darg))
+      {
+        std::cerr << "[ERROR] Error getting double argument for kernel." << std::endl;
+        return enif_make_badarg(env);
+      }
+
+      kernel->setArg(i, darg);
+    }
+    else if (
+        strcmp(arg_type_name, "tint") == 0 ||
+        strcmp(arg_type_name, "tfloat") == 0 ||
+        strcmp(arg_type_name, "tdouble") == 0 ||
+        strcmp(arg_type_name, "tatomic_int") == 0 ||
+        strcmp(arg_type_name, "tatomic_float") == 0 ||
+        strcmp(arg_type_name, "tatomic_double") == 0)
+    {
+      if (device_type == OCLInterface::DeviceType::GPU)
+      {
+        cl::Buffer *array_res;
+        if (!enif_get_resource(env, arg, ARRAY_TYPE, (void **)&array_res))
+        {
+          std::cerr << "[ERROR] Error getting buffer (array) resource for kernel." << std::endl;
+          return enif_make_badarg(env);
+        }
+
+        kernel->setArg(i, *array_res);
+      }
+      else if (device_type == OCLInterface::DeviceType::CPU)
+      {
+        void **svm_res;
+        if (!enif_get_resource(env, arg, CPU_SVM_TYPE, (void **)&svm_res))
+        {
+          std::cerr << "[ERROR] Error getting SVM resource for kernel." << std::endl;
+          return enif_make_badarg(env);
+        }
+
+        kernel->setArg(i, *svm_res);
+      }
+    }
+    else
+    {
+      std::cerr << "[ERROR] Unknown argument type '" << arg_type_name << "' for kernel." << std::endl;
+      return enif_make_badarg(env);
+    }
+
+    list_args_types = tail_args_types;
+    list_args = tail_args;
+  }
+
+  // Now we can execute the kernel
+  try
+  {
+    open_cl->executeKernel(*kernel, global_range, local_range, device_type);
+    open_cl->synchronize(device_type); // Ensure that the kernel execution is completed before proceeding
+
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' executed successfully." << std::endl;
+    }
+  }
+  catch (const std::exception &e)
+  {
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+
+  return enif_make_int(env, 0);
 }
 
 // This function compiles the given kernel code and launches it with the specified blocks and threads.
@@ -1217,6 +1531,8 @@ static ERL_NIF_TERM map_nx_svm_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
 // uses C++17. Therefore, I'm using the traditional aggregate initialization syntax, which requires the fields to be in
 // the order they are declared in the struct.
 static ErlNifFunc nif_funcs[] = {
+    {"jit_compile_nif", 3, jit_compile_nif, 0},
+    {"jit_launch_nif", 7, jit_launch_nif, 0},
     {"jit_compile_and_launch_nif", 8, jit_compile_and_launch_nif, 0},
     {"new_empty_array_nif", 4, new_empty_array_nif, 0},
     {"get_device_array_nif", 5, get_device_array_nif, 0},
