@@ -13,6 +13,7 @@ defmodule Orchestra.CallGraphSorter do
   # Returns
     - A list of {function_name, ast} tuples sorted by their call dependencies.
   """
+  @spec sort(list()) :: list()
   def sort(functions) do
     # Convert the list of tuples into a map for easy and O(1) lookup: %{function_name => {dependencies, ast}}
     graph = Map.new(functions, fn {name, ast, deps} -> {name, {deps, ast}} end)
@@ -38,6 +39,7 @@ defmodule Orchestra.CallGraphSorter do
 
   # -- Private Helpers --
 
+  @spec visit(any(), map(), MapSet.t(), {MapSet.t(), list()}) :: {MapSet.t(), list()}
   defp visit(node, graph, path, {visited, _list} = acc) do
     if MapSet.member?(visited, node) do
       # If already visited globally, skip
@@ -47,14 +49,15 @@ defmodule Orchestra.CallGraphSorter do
     end
   end
 
+  @spec do_visit(any(), map(), MapSet.t(), {MapSet.t(), list()}) :: {MapSet.t(), list()}
   defp do_visit(node, graph, path, {visited, sorted_list}) do
     if MapSet.member?(path, node) do
       # Cycle detection: If we see a node that is currently in our recursion stack
       raise "Circular dependency detected involving function: :#{node}"
     end
 
-    # Get dependencies. If node isn't in graph, return empty list
-    {deps, _ast} = Map.get(graph, node, [])
+    # Get dependencies. If node isn't in graph, return empty list with nil AST
+    {deps, _ast} = Map.get(graph, node, {[], nil})
 
     # Add current node to the recursion path (so we can detect cycles)
     new_path = MapSet.put(path, node)
