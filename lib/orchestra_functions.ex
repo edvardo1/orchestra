@@ -131,7 +131,9 @@ defmodule OrchestraFunctions do
       return_type: :int,
       arg_types: [:tatomic_int],
     },
-    # ---- Remove this later, it's here just to demonstrate
+    # ---- This one is here just to demonstrate how stupid libSPIRV is. It thinks, because of the function 'atomic_' prefix,
+    # that this function is a built-in OpenCL C atomic function. This makes the ENTIRE Erlang BEAM VM to crash :D
+    # This stupid idiot compiler took me 2hrs to debug. - Henrique
     atomic_load_int: %{
       return_type: :int,
       arg_types: [:tatomic_int],

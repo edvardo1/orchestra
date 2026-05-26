@@ -28,9 +28,6 @@ inline __attribute__((overloadable)) int load_atomic_int(volatile ADDR_SPACE ATO
   return atomic_load_explicit(ptr, MEMORY_ORDER, ATOMIC_SCOPE); \
 } \
 \
-// This one is here just to demonstrate how stupid libSPIRV is. It thinks, because of the function 'atomic_' prefix,
-// that this function is a built-in OpenCL C atomic function. This makes the ENTIRE Erlang BEAM VM to crash :D
-// This stupid idiot compiler took me 2hrs to debug. - Henrique
 inline __attribute__((overloadable)) int atomic_load_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr) { \
   return atomic_load_explicit(ptr, MEMORY_ORDER, ATOMIC_SCOPE); \
 } \
