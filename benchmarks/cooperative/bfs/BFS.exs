@@ -111,8 +111,6 @@ defmodule CsrReader do
 end
 
 Orchestra.defmodule BFS do
-  @cpu_limit 512
-
   defk cpu_bfs_kernel(
          nodes,
          n_nodes,
@@ -244,6 +242,7 @@ Orchestra.defmodule BFS do
           total_nodes: total_nodes,
           start_node: start_node
         } = nodes_map,
+        cpu_limit,
         max_iterations \\ :infinity
       ) do
     IO.puts("============== Creating Tensors... ==============")
@@ -268,21 +267,22 @@ Orchestra.defmodule BFS do
 
     IO.puts("============== Starting Recursion ==============")
 
-    bfs_recursion(nodes_map, frontier_size, tensor_map, max_iterations)
+    bfs_recursion(nodes_map, frontier_size, tensor_map, max_iterations, cpu_limit)
   end
 
   @spec bfs_recursion(
           nodes_map :: map(),
           frontier_size :: integer(),
           tensor_map :: map(),
-          max_iterations :: :infinity | integer()
+          max_iterations :: :infinity | integer(),
+          cpu_limit :: integer()
         ) :: :ok
   # End BFS when frontier size goes to 0
-  defp bfs_recursion(_map, 0, _tensor_map, _max_iterations),
+  defp bfs_recursion(_map, 0, _tensor_map, _max_iterations, _cpu_limit),
     do: :ok
 
   # End BFS when max_iterations becomes 0
-  defp bfs_recursion(_map, _frontier_size, _tensor_map, 0),
+  defp bfs_recursion(_map, _frontier_size, _tensor_map, 0, _cpu_limit),
     do: :ok
 
   defp bfs_recursion(
@@ -299,10 +299,11 @@ Orchestra.defmodule BFS do
            next_idx: next_idx_tensor,
            overflow: overflow_tensor
          } = tensor_map,
-         max_iterations
+         max_iterations,
+         cpu_limit
        ) do
     tensor_map =
-      if frontier_size > @cpu_limit do
+      if frontier_size > cpu_limit do
         # IO.puts("============== FRONTIER: #{frontier_size} > #{@cpu_limit} | GPU")
 
         Orchestra.with Orchestra.gpu() do
@@ -415,7 +416,8 @@ Orchestra.defmodule BFS do
       nodes_map,
       new_frontier_size,
       tensor_map,
-      remaining_iterations
+      remaining_iterations,
+      cpu_limit
     )
   end
 end
@@ -424,27 +426,43 @@ end
 argv = System.argv()
 argv_len = length(argv)
 
-{file, it} =
+{file, cpu_limit, it} =
   case argv_len do
     1 ->
       [f] = argv
-      {f, :infinity}
+      # Default cpu limit is 512
+      {f, 512, :infinity}
 
     2 ->
-      [f, i] = argv
+      [f, c] = argv
+      c = String.to_integer(c)
+
+      if c > 0 do
+        {f, c, :infinity}
+      else
+        {f, 512, :infinity}
+      end
+
+    3 ->
+      [f, c, i] = argv
+      c = String.to_integer(c)
       i = String.to_integer(i)
 
-      if i > 0 do
-        {f, i}
+      if i > 0 and c > 0 do
+        {f, c, i}
       else
-        {f, :infinity}
+        {f, 512, :infinity}
       end
 
     _ ->
-      IO.puts("Usage: mix run #{Path.basename(__ENV__.file)} FILE_PATH [MAX_ITERATIONS]\n")
+      IO.puts("Usage: mix run #{Path.basename(__ENV__.file)} FILE_PATH CPU_LIMIT [MAX_ITERATIONS]\n")
 
       IO.puts(
         "The MAX_ITERATIONS is an optional parameter that must be a positive number greater than 0. It specifies how many levels of the graph the algorithm is allowed to explore. If omitted, BFS will assume infinite iterations are allowed."
+      )
+
+      IO.puts(
+        "The CPU_LIMIT is an optional parameter that must be a positive number greater than 0. It specifies the maximum frontier size that will be processed on the CPU. If the frontier size exceeds this limit, it will be processed on the GPU. If omitted, the default CPU_LIMIT is 512."
       )
 
       System.halt(0)
@@ -463,7 +481,7 @@ IO.puts(
 )
 
 start = System.monotonic_time()
-BFS.bfs(graph_map, it)
+BFS.bfs(graph_map, cpu_limit, it)
 stop = System.monotonic_time()
 
 IO.puts("BFS took: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms")
