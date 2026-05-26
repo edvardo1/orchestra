@@ -111,6 +111,8 @@ defmodule CsrReader do
 end
 
 Orchestra.defmodule BFS do
+  @cpu_limit 512
+
   defk cpu_bfs_kernel(
          nodes,
          n_nodes,
@@ -148,7 +150,7 @@ Orchestra.defmodule BFS do
         visited[dest_node_idx] = 1
 
         # Update empty slot and get the index we will use here
-        idx = atomic_add_int(next_slot, 1)
+        idx = add_atomic_int(next_slot, 1)
 
         # Add this node to new frontier
         new_frontier[idx] = dest_node_idx
@@ -156,24 +158,107 @@ Orchestra.defmodule BFS do
     end
   end
 
+  defk gpu_bfs_kernel(
+         nodes,
+         n_nodes,
+         edges,
+         frontier,
+         frontier_size,
+         new_frontier,
+         atomic(next_slot),
+         atomic(visited),
+         overflow
+       ) do
+    tid = get_global_id(0)
+    lid = get_local_id(0)
+
+    # Declare a local buffer for this thread
+    __local local_buffer[256]
+    __local shift[1]
+    __atomic_local local_free_idx[1]
+
+    # Only thread 0 of the work group will initialize the local free index and shift
+    if lid == 0 do
+      init_atomic_int(local_free_idx, 0)
+      shift[0] = 0
+    end
+
+    # All threads need to wait for the initialization to be done
+    __syncthreads()
+
+    if tid < frontier_size && tid < n_nodes do
+      # Get node to process in this thread
+      node_idx = frontier[tid]
+      # Mark it as visited
+      was_visited = max_atomic_int(visited + node_idx, 1)
+
+      # -- Get node info --
+      # Node edges index in edges array
+      node_edges_idx = nodes[node_idx * 2 + 0]
+      # Number of edges this node has
+      node_num_edges = nodes[node_idx * 2 + 1]
+
+      for i in range(node_edges_idx, node_edges_idx + node_num_edges) do
+        # Getting child node
+        dest_node_idx = edges[i * 2 + 0]
+
+        # Mark as visited and check if it was already visited in the same atomic operation
+        was_visited = max_atomic_int(visited + dest_node_idx, 1)
+
+        # Check if this node was visited
+        if was_visited == 0 do
+          # Update local buffer with this node
+          idx = add_atomic_int(local_free_idx, 1)
+
+          if idx < 256 do
+            local_buffer[idx] = dest_node_idx
+          else
+            overflow[0] = 1
+          end
+        end
+      end
+    end
+
+    # Wait for all threads to finish populating the buffer before reading its size
+    __syncthreads()
+
+    priv_buffer_size = load_atomic_int(local_free_idx)
+
+    if lid == 0 do
+      shift[0] = add_atomic_int(next_slot, priv_buffer_size)
+    end
+
+    # Wait for shift to be updated
+    __syncthreads()
+
+    # Now we need to update the global new frontier with the local buffer of the work group
+    priv_shift = lid
+    while (priv_shift < priv_buffer_size) do
+      new_frontier[priv_shift + shift[0]] = local_buffer[priv_shift]
+      priv_shift = priv_shift + get_local_size(0)
+    end
+  end
+
   def bfs(
         %{
           total_nodes: total_nodes,
           start_node: start_node
-        } = map,
+        } = nodes_map,
         max_iterations \\ :infinity
       ) do
     IO.puts("============== Creating Tensors... ==============")
 
+    frontier_size = 1
+
     start = System.monotonic_time()
 
-    frontier_size = 1
-    frontier = Orchestra.tensor({total_nodes}, :s32, fn _ -> start_node end)
-    new_frontier = Orchestra.tensor({total_nodes}, :s32)
-    visited = Orchestra.tensor({total_nodes}, :s32, fn _ -> 0 end)
-
-    # This variable holds the next available index in the new_frontier
-    next_idx = Orchestra.tensor([0], :s32)
+    tensor_map = %{
+      frontier: Orchestra.tensor({total_nodes}, :s32, fn _ -> start_node end),
+      new_frontier: Orchestra.tensor({total_nodes}, :s32),
+      visited: Orchestra.tensor({total_nodes}, :s32, fn _ -> 0 end),
+      next_idx: Orchestra.tensor([0], :s32),
+      overflow: Orchestra.tensor([0], :s32)
+    }
 
     stop = System.monotonic_time()
 
@@ -183,13 +268,21 @@ Orchestra.defmodule BFS do
 
     IO.puts("============== Starting Recursion ==============")
 
-    bfs_recursion(map, frontier_size, frontier, new_frontier, next_idx, visited, max_iterations)
+    bfs_recursion(nodes_map, frontier_size, tensor_map, max_iterations)
   end
 
-  defp bfs_recursion(_map, 0, _frontier_a, _frontier_b, _next_idx, _visited, _max_iterations),
+  @spec bfs_recursion(
+          nodes_map :: map(),
+          frontier_size :: integer(),
+          tensor_map :: map(),
+          max_iterations :: :infinity | integer()
+        ) :: :ok
+  # End BFS when frontier size goes to 0
+  defp bfs_recursion(_map, 0, _tensor_map, _max_iterations),
     do: :ok
 
-  defp bfs_recursion(_map, _frontier_size, _frontier_a, _frontier_b, _next_idx, _visited, 0),
+  # End BFS when max_iterations becomes 0
+  defp bfs_recursion(_map, _frontier_size, _tensor_map, 0),
     do: :ok
 
   defp bfs_recursion(
@@ -197,43 +290,120 @@ Orchestra.defmodule BFS do
            total_nodes: total_nodes,
            nodes: nodes_tensor,
            edges: edges_tensor
-         } = map,
+         } = nodes_map,
          frontier_size,
-         frontier,
-         new_frontier,
-         next_idx,
-         visited,
+         %{
+           frontier: frontier_tensor,
+           new_frontier: new_frontier_tensor,
+           visited: visited_tensor,
+           next_idx: next_idx_tensor,
+           overflow: overflow_tensor
+         } = tensor_map,
          max_iterations
        ) do
-    Orchestra.with Orchestra.cpu() do
-      Orchestra.spawn(
-        &BFS.cpu_bfs_kernel/8,
-        {frontier_size},
-        {0},
-        [
-          nodes_tensor,
-          total_nodes,
-          edges_tensor,
-          frontier,
-          frontier_size,
-          new_frontier,
-          next_idx,
-          visited
-        ]
-      )
+    tensor_map =
+      if frontier_size > @cpu_limit do
+        # IO.puts("============== FRONTIER: #{frontier_size} > #{@cpu_limit} | GPU")
+
+        Orchestra.with Orchestra.gpu() do
+          # Check if tensors map has GNx already, if not, we will add them
+          tensor_map =
+            if Map.has_key?(tensor_map, :frontier_gnx) do
+              # Tensor map already has GNx, we will update their content
+              Orchestra.write_gnx(tensor_map.frontier_gnx, frontier_tensor)
+              Orchestra.write_gnx(tensor_map.visited_gnx, visited_tensor)
+              Orchestra.write_gnx(tensor_map.next_idx_gnx, next_idx_tensor)
+
+              tensor_map
+            else
+              Map.merge(tensor_map, %{
+                frontier_gnx: Orchestra.new_gnx(frontier_tensor),
+                new_frontier_gnx:
+                  Orchestra.new_gnx(
+                    Orchestra.get_shape(new_frontier_tensor),
+                    Orchestra.get_type(new_frontier_tensor)
+                  ),
+                visited_gnx: Orchestra.new_gnx(visited_tensor),
+                next_idx_gnx: Orchestra.new_gnx(next_idx_tensor),
+                nodes_gnx: Orchestra.new_gnx(nodes_tensor),
+                edges_gnx: Orchestra.new_gnx(edges_tensor),
+                overflow_gnx: Orchestra.new_gnx(Orchestra.tensor([0], :s32))
+              })
+            end
+
+          threads_per_block = 128
+          num_blocks = div(frontier_size + threads_per_block - 1, threads_per_block)
+
+          Orchestra.spawn(
+            &BFS.gpu_bfs_kernel/9,
+            {num_blocks},
+            {threads_per_block},
+            [
+              tensor_map.nodes_gnx,
+              total_nodes,
+              tensor_map.edges_gnx,
+              tensor_map.frontier_gnx,
+              frontier_size,
+              tensor_map.new_frontier_gnx,
+              tensor_map.next_idx_gnx,
+              tensor_map.visited_gnx,
+              tensor_map.overflow_gnx
+            ]
+          )
+
+          # After GPU execution, we need to get the results back to the CPU tensors
+          Orchestra.get_gnx(tensor_map.new_frontier_gnx, new_frontier_tensor)
+          Orchestra.get_gnx(tensor_map.next_idx_gnx, next_idx_tensor)
+          Orchestra.get_gnx(tensor_map.visited_gnx, visited_tensor)
+          Orchestra.get_gnx(tensor_map.overflow_gnx, overflow_tensor)
+
+          tensor_map
+        end
+      else
+        # IO.puts("============== FRONTIER: #{frontier_size} <= #{@cpu_limit} | CPU")
+
+        Orchestra.with Orchestra.cpu() do
+          Orchestra.spawn(
+            &BFS.cpu_bfs_kernel/8,
+            {frontier_size},
+            {0},
+            [
+              nodes_tensor,
+              total_nodes,
+              edges_tensor,
+              frontier_tensor,
+              frontier_size,
+              new_frontier_tensor,
+              next_idx_tensor,
+              visited_tensor
+            ]
+          )
+
+          # Here we just return the map unaltered, because the CPU execution
+          # modifies the tensors in place
+          tensor_map
+        end
+      end
+
+    # Print what was processed in this iteration
+    # IO.inspect(frontier_tensor, label: "Current frontier")
+    # IO.inspect(new_frontier_tensor, label: "New frontier")
+    # IO.inspect(next_idx_tensor, label: "Next frontier size")
+    # IO.inspect(visited_tensor, label: "Visited nodes")
+
+    if Nx.to_number(overflow_tensor[0]) == 1 do
+      IO.puts("Overflow in local buffer! Some nodes might not have been added to the frontier.")
     end
 
-    # For the next iteration, the next free index will be reset
-    new_next_idx = Orchestra.tensor([0], :s32)
-    new_frontier_size = Nx.to_number(next_idx[0])
-
-    IO.puts("=================================================")
-    IO.inspect(frontier_size, label: "processed frontier size")
-    IO.inspect(frontier, label: "frontier")
-    IO.inspect(new_frontier, label: "new_frontier")
-    IO.inspect(new_frontier_size, label: "size of new_frontier")
-    IO.inspect(next_idx, label: "next_idx")
-    IO.inspect(visited, label: "visited")
+    # For the next iteration, the next free index will be reset and the current frontier and new
+    # frontier will be swapped
+    tensor_map = Map.merge(tensor_map, %{
+      next_idx: Orchestra.tensor([0], :s32),
+      frontier: new_frontier_tensor,
+      new_frontier: frontier_tensor
+    })
+    # Updating frontier size for the next iteration
+    new_frontier_size = Nx.to_number(next_idx_tensor[0])
 
     remaining_iterations =
       cond do
@@ -242,12 +412,9 @@ Orchestra.defmodule BFS do
       end
 
     bfs_recursion(
-      map,
+      nodes_map,
       new_frontier_size,
-      new_frontier,
-      frontier,
-      new_next_idx,
-      visited,
+      tensor_map,
       remaining_iterations
     )
   end
@@ -265,8 +432,9 @@ argv_len = length(argv)
 
     2 ->
       [f, i] = argv
+      i = String.to_integer(i)
 
-      if is_integer(i) && i > 0 do
+      if i > 0 do
         {f, i}
       else
         {f, :infinity}
