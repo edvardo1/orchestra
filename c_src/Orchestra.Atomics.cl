@@ -16,39 +16,61 @@
 
 // ========= 32-bit Integers Atomics (supported natively)=========
 
-#define ATOMIC_INT_PTR volatile __global atomic_int *
+#define ATOMIC_INT_PTR atomic_int *
 
-inline int atomic_add_int(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_fetch_add_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
+#define DECLARE_ATOMIC_INT_FUNCS(ADDR_SPACE) \
+\
+inline __attribute__((overloadable)) void init_atomic_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  atomic_init(ptr, val); \
+} \
+\
+inline __attribute__((overloadable)) int load_atomic_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr) { \
+  return atomic_load_explicit(ptr, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+// This one is here just to demonstrate how stupid libSPIRV is. It thinks, because of the function 'atomic_' prefix,
+// that this function is a built-in OpenCL C atomic function. This makes the ENTIRE Erlang BEAM VM to crash :D
+// This stupid idiot compiler took me 2hrs to debug. - Henrique
+inline __attribute__((overloadable)) int atomic_load_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr) { \
+  return atomic_load_explicit(ptr, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) int add_atomic_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_fetch_add_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) int sub_atomic_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_fetch_sub_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) int exchange_atomic_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_exchange_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) int min_atomic_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_fetch_min_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) int max_atomic_int(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_fetch_max_explicit(ptr, val, MEMORY_ORDER, memory_scope_device); \
+} \
+\
+inline __attribute__((overloadable)) int and_atomic(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_fetch_and_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) int or_atomic(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_fetch_or_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) int xor_atomic(volatile ADDR_SPACE ATOMIC_INT_PTR ptr, int val) { \
+  return atomic_fetch_xor_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
 }
 
-inline int atomic_sub_int(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_fetch_sub_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
+// Declare atomic functions for both global and local address spaces
 
-inline int atomic_exchange_int(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_exchange_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline int atomic_min_int(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_fetch_min_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline int atomic_max_int(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_fetch_max_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline int atomic_and(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_fetch_and_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline int atomic_or(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_fetch_or_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline int atomic_xor(ATOMIC_INT_PTR ptr, int val) {
-  return atomic_fetch_xor_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
+DECLARE_ATOMIC_INT_FUNCS(__global)
+DECLARE_ATOMIC_INT_FUNCS(__local)
 
 // ========= 32-bit Floats Atomics (only supported by extension)=========
 
@@ -57,27 +79,40 @@ inline int atomic_xor(ATOMIC_INT_PTR ptr, int val) {
 // Enable float atomics extension
 #pragma OPENCL EXTENSION cl_ext_float_atomics : enable
 
-#define ATOMIC_FLOAT_PTR volatile __global atomic_float *
+#define ATOMIC_FLOAT_PTR atomic_float *
 
-inline float atomic_add_float(ATOMIC_FLOAT_PTR ptr, float val) {
-  return atomic_fetch_add_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
+#define DECLARE_ATOMIC_FLOAT_FUNCS(ADDR_SPACE) \
+\
+inline __attribute__((overloadable)) void init_atomic_float(volatile ADDR_SPACE ATOMIC_FLOAT_PTR ptr, float val) { \
+  atomic_init(ptr, val); \
+} \
+\
+inline __attribute__((overloadable)) float load_atomic_float(volatile ADDR_SPACE ATOMIC_FLOAT_PTR ptr) { \
+  return atomic_load_explicit(ptr, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) float add_atomic_float(volatile ADDR_SPACE ATOMIC_FLOAT_PTR ptr, float val) { \
+  return atomic_fetch_add_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) float sub_atomic_float(volatile ADDR_SPACE ATOMIC_FLOAT_PTR ptr, float val) { \
+  return atomic_fetch_sub_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) float exchange_atomic_float(volatile ADDR_SPACE ATOMIC_FLOAT_PTR ptr, float val) { \
+  return atomic_exchange_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) float min_atomic_float(volatile ADDR_SPACE ATOMIC_FLOAT_PTR ptr, float val) { \
+  return atomic_fetch_min_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) float max_atomic_float(volatile ADDR_SPACE ATOMIC_FLOAT_PTR ptr, float val) { \
+  return atomic_fetch_max_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
 }
 
-inline float atomic_sub_float(ATOMIC_FLOAT_PTR ptr, float val) {
-  return atomic_fetch_sub_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline float atomic_exchange_float(ATOMIC_FLOAT_PTR ptr, float val) {
-  return atomic_exchange_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline float atomic_min_float(ATOMIC_FLOAT_PTR ptr, float val) {
-  return atomic_fetch_min_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline float atomic_max_float(ATOMIC_FLOAT_PTR ptr, float val) {
-  return atomic_fetch_max_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
+DECLARE_ATOMIC_FLOAT_FUNCS(__global)
+DECLARE_ATOMIC_FLOAT_FUNCS(__local)
 
 #endif
 
@@ -95,26 +130,39 @@ compiler must also define the __opencl_c_fp64 feature.
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 #pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable
 
-#define ATOMIC_DOUBLE_PTR volatile __global atomic_double *
+#define ATOMIC_DOUBLE_PTR atomic_double *
 
-inline double atomic_add_double(ATOMIC_DOUBLE_PTR ptr, double val) {
-  return atomic_fetch_add_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
+#define DECLARE_ATOMIC_DOUBLE_FUNCS(ADDR_SPACE) \
+\
+inline __attribute__((overloadable)) void init_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr, double val) { \
+  atomic_init(ptr, val); \
+} \
+\
+inline __attribute__((overloadable)) double load_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr) { \
+  return atomic_load_explicit(ptr, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) double add_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr, double val) { \
+  return atomic_fetch_add_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) double sub_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr, double val) { \
+  return atomic_fetch_sub_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) double exchange_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr, double val) { \
+  return atomic_exchange_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) double min_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr, double val) { \
+  return atomic_fetch_min_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
+} \
+\
+inline __attribute__((overloadable)) double max_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr, double val) { \
+  return atomic_fetch_max_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
 }
 
-inline double atomic_sub_double(ATOMIC_DOUBLE_PTR ptr, double val) {
-  return atomic_fetch_sub_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline double atomic_exchange_double(ATOMIC_DOUBLE_PTR ptr, double val) {
-  return atomic_exchange_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline double atomic_min_double(ATOMIC_DOUBLE_PTR ptr, double val) {
-  return atomic_fetch_min_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
-
-inline double atomic_max_double(ATOMIC_DOUBLE_PTR ptr, double val) {
-  return atomic_fetch_max_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE);
-}
+DECLARE_ATOMIC_DOUBLE_FUNCS(__global)
+DECLARE_ATOMIC_DOUBLE_FUNCS(__local)
 
 #endif

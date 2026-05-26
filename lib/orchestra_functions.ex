@@ -115,75 +115,105 @@ defmodule OrchestraFunctions do
       arg_types: []
     },
     # --- Atomics ---
-    atomic_add_int: %{
+    init_atomic_int: %{
+      return_type: :unit,
+      arg_types: [:tatomic_int, :int],
+    },
+    init_atomic_float: %{
+      return_type: :unit,
+      arg_types: [:tatomic_float, :float],
+    },
+    init_atomic_double: %{
+      return_type: :unit,
+      arg_types: [:tatomic_double, :double],
+    },
+    load_atomic_int: %{
+      return_type: :int,
+      arg_types: [:tatomic_int],
+    },
+    # ---- Remove this later, it's here just to demonstrate
+    atomic_load_int: %{
+      return_type: :int,
+      arg_types: [:tatomic_int],
+    },
+    # ----
+    load_atomic_float: %{
+      return_type: :float,
+      arg_types: [:tatomic_float],
+    },
+    load_atomic_double: %{
+      return_type: :double,
+      arg_types: [:tatomic_double],
+    },
+    add_atomic_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     },
-    atomic_add_float: %{
+    add_atomic_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
     },
-    atomic_add_double: %{
+    add_atomic_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
     },
-    atomic_sub_int: %{
+    sub_atomic_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     },
-    atomic_sub_float: %{
+    sub_atomic_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
     },
-    atomic_sub_double: %{
+    sub_atomic_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
     },
-    atomic_exchange_int: %{
+    exchange_atomic_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     },
-    atomic_exchange_float: %{
+    exchange_atomic_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
     },
-    atomic_exchange_double: %{
+    exchange_atomic_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
     },
-    atomic_min_int: %{
+    min_atomic_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     },
-    atomic_min_float: %{
+    min_atomic_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
     },
-    atomic_min_double: %{
+    min_atomic_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
     },
-    atomic_max_int: %{
+    max_atomic_int: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     },
-    atomic_max_float: %{
+    max_atomic_float: %{
       return_type: :float,
       arg_types: [:tatomic_float, :float],
     },
-    atomic_max_double: %{
+    max_atomic_double: %{
       return_type: :double,
       arg_types: [:tatomic_double, :double],
     },
-    atomic_and: %{
+    and_atomic: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     },
-    atomic_or: %{
+    or_atomic: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     },
-    atomic_xor: %{
+    xor_atomic: %{
       return_type: :int,
       arg_types: [:tatomic_int, :int],
     }
