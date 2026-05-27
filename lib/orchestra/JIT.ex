@@ -924,6 +924,9 @@ defmodule JIT do
         # IO.inspect "Aqui"
         Enum.reduce(args, map, fn x, acc -> find_function_calls_exp(acc, x) end)
 
+      {op, _info, args} when op in [:>>>, :<<<, :~>>, :&&&, :|||, :+++] ->
+        Enum.reduce(args, map, fn x, acc -> find_function_calls_exp(acc, x) end)
+
       {op, _info, args} when op in [:<=, :<, :>, :>=, :&&, :||, :!, :!=, :==] ->
         Enum.reduce(args, map, fn x, acc -> find_function_calls_exp(acc, x) end)
 

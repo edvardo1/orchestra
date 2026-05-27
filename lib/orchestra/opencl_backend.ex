@@ -284,6 +284,7 @@ defmodule Orchestra.OpenCLBackend do
       {{:., _, [{_struct, _, nil}, _field]}, _, []} -> true
       {{:., _, [{:__aliases__, _, [_struct]}, _field]}, _, []} -> true
       {op, _info, _args} when op in [:+, :-, :/, :*] -> true
+      {op, _info, [_arg1]} when op in [:>>>, :<<<, :~>>, :&&&, :|||, :+++] -> true
       {op, _info, [_arg1, _arg2]} when op in [:<=, :<, :>, :>=, :!=, :==] -> true
       {:!, _info, [_arg]} -> true
       {op, _inf, _args} when op in [:&&, :||] -> true

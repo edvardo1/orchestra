@@ -277,6 +277,7 @@ defmodule Orchestra.TypeInference do
       {{:., _, [{_struct, _, nil}, _field]}, _, []} -> true
       {{:., _, [{:__aliases__, _, [_struct]}, _field]}, _, []} -> true
       {op, _info, _args} when op in [:+, :-, :/, :*] -> true
+      {op, _info, [_arg1]} when op in [:>>>, :<<<, :~>>, :&&&, :|||, :+++] -> true
       {op, _info, [_arg1, _arg2]} when op in [:<=, :<, :>, :>=, :!=, :==] -> true
       {:!, _info, [_arg]} -> true
       {op, _inf, _args} when op in [:&&, :||] -> true
@@ -763,7 +764,7 @@ defmodule Orchestra.TypeInference do
             raise "Exp #{inspect(a1)} (#{inspect(info)}) has type #{tt} and should have type #{type}"
         end
 
-      {op, _info, args} when op in [:+, :-, :/, :*] ->
+      {op, _info, args} when op in [:+, :-, :/, :*, :>>>, :<<<, :~>>, :&&&, :|||, :+++] ->
         case args do
           [a1] ->
             set_type_exp(map, type, a1)
@@ -951,7 +952,7 @@ defmodule Orchestra.TypeInference do
   defp infer_type_fun(map, exp) do
     case exp do
       # Check if the expression is an operation, if it is, we simply return the map unchanged
-      {op, _, _args} when op in [:+, :-, :/, :*, :<=, :<, :>, :>=, :!=, :==, :!, :&&, :||] ->
+      {op, _, _args} when op in [:+, :-, :/, :*, :<=, :<, :>, :>=, :!=, :==, :!, :&&, :||, :>>>, :<<<, :~>>, :&&&, :|||, :+++] ->
         map
 
       {fun, _, args} when is_list(args) ->
@@ -1112,6 +1113,10 @@ defmodule Orchestra.TypeInference do
                 raise "Incompatible operands (#{inspect(info)}: op (#{inspect(op)}) applyed to  type #{inspect(t1)}"
             end
         end
+
+      # Bitwise operations must return int
+      {op, _, _args} when op in [:>>>, :<<<, :~>>, :&&&, :|||, :+++] ->
+        :int
 
       # Comparison and logical operations, we assume they return int (0 or 1)
       {op, _, _args} when op in [:<=, :<, :>, :>=, :&&, :||, :!, :!=, :==] ->
