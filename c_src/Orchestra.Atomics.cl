@@ -176,10 +176,11 @@ inline __attribute__((overloadable)) double min_atomic_double(volatile ADDR_SPAC
 \
 inline __attribute__((overloadable)) double max_atomic_double(volatile ADDR_SPACE ATOMIC_DOUBLE_PTR ptr, double val) { \
   return atomic_fetch_max_explicit(ptr, val, MEMORY_ORDER, ATOMIC_SCOPE); \
-
 }
+
 DECLARE_ATOMIC_DOUBLE_MIN_MAX(__global)
 DECLARE_ATOMIC_DOUBLE_MIN_MAX(__local)
 
 #endif
+
 #endif
