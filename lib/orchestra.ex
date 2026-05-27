@@ -343,15 +343,18 @@ defmodule Orchestra do
   def write_gnx(
         %Orchestra.Context{} = _ctx,
         {{:nx, _type, _shape, _name, _gnx_ref}, %Orchestra.Context{} = _gnx_ctx} = gnx,
-        %Nx.Tensor{data: %Nx.BinaryBackend{state: _tensor_ref}} = tensor
+        %Nx.Tensor{data: %Nx.BinaryBackend{state: _tensor_ref}} = tensor,
+        elements_to_copy
       ),
-      do: write_gnx(gnx, tensor)
+      do: write_gnx(gnx, tensor, elements_to_copy)
 
   def write_gnx(
         {{:nx, _type, _shape, _name, gnx_ref}, %Orchestra.Context{} = _gnx_ctx},
-        %Nx.Tensor{data: %Nx.BinaryBackend{state: tensor_ref}}
+        %Nx.Tensor{data: %Nx.BinaryBackend{state: tensor_ref}, type: type},
+        elements_to_copy
       ) do
-    write_tensor_to_gnx_nif(gnx_ref, tensor_ref)
+    type_charlist = get_type_charlist(type)
+    write_tensor_to_gnx_nif(gnx_ref, tensor_ref, type_charlist, elements_to_copy)
   end
 
   # ------- New NX Tensor functions (they allocate aligned memory) -------
@@ -946,7 +949,7 @@ defmodule Orchestra do
     :erlang.nif_error(:nif_not_loaded)
   end
 
-  def write_tensor_to_gnx_nif(_gnx_ref, _tensor_ref) do
+  def write_tensor_to_gnx_nif(_gnx_ref, _tensor_ref, _tensor_type_charlist, _elements_to_copy) do
     :erlang.nif_error(:nif_not_loaded)
   end
 

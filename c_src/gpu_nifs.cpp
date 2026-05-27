@@ -1625,13 +1625,15 @@ static ERL_NIF_TERM map_nx_svm_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
 
 static ERL_NIF_TERM write_tensor_to_gnx_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  if (argc != 2)
+  if (argc != 4)
   {
     return enif_make_badarg(env);
   }
 
   ERL_NIF_TERM e_gnx_buffer = argv[0];
   ERL_NIF_TERM e_tensor_data = argv[1];
+  ERL_NIF_TERM e_tensor_type_charlist = argv[2];
+  ERL_NIF_TERM e_elements_to_copy = argv[3];
 
   // Get the GNx cl::Buffer from the resource
   cl::Buffer *gnx_buffer = nullptr;
@@ -1649,7 +1651,7 @@ static ERL_NIF_TERM write_tensor_to_gnx_nif(ErlNifEnv *env, int argc, const ERL_
     return enif_make_badarg(env);
   }
 
-  // Now we need to check if the cl::Buffer has enough size to hold the tensor data before writing to it
+  // Check if the cl::Buffer has enough size to hold the tensor data before writing to it
   size_t buffer_size_bytes = gnx_buffer->getInfo<CL_MEM_SIZE>();
   if (buffer_size_bytes < tensor_data.size)
   {
@@ -1657,9 +1659,70 @@ static ERL_NIF_TERM write_tensor_to_gnx_nif(ErlNifEnv *env, int argc, const ERL_
     return enif_make_badarg(env);
   }
 
+  // If the users pass 'nil' as the size to copy, this means to copy the entire tensor data to the GNx
+  // Otherwise, we will copy only the specified number of elements from the tensor to the GNx
+  size_t size_to_copy_bytes;
+  if (enif_is_atom(env, e_elements_to_copy))
+  {
+    ERL_NIF_TERM nil_atom = enif_make_atom(env, "nil");
+
+    if (enif_compare(e_elements_to_copy, nil_atom) == 0)
+    {
+      // Copy the entire tensor data
+      size_to_copy_bytes = tensor_data.size;
+    }
+    else
+    {
+      return enif_make_badarg(env);
+    }
+  }
+  else if (enif_is_number(env, e_elements_to_copy))
+  {
+    // Save number of elements to copy in size_to_copy_bytes
+    if (!enif_get_int(env, e_elements_to_copy, (int *)&size_to_copy_bytes))
+    {
+      return enif_make_badarg(env);
+    }
+
+    // Check the type of the tensor elements to calculate the correct size in bytes to copy
+    uint32_t size_type_name;
+    if (!enif_get_list_length(env, e_tensor_type_charlist, &size_type_name))
+    {
+      return enif_make_badarg(env);
+    }
+
+    std::string tensor_type(size_type_name, '\0');
+    if (!enif_get_string(env, e_tensor_type_charlist, tensor_type.data(), size_type_name + 1, ERL_NIF_LATIN1))
+    {
+      return enif_make_badarg(env);
+    }
+    
+    if (tensor_type == "float")
+    {
+      size_to_copy_bytes *= sizeof(float);
+    }
+    else if (tensor_type == "int")
+    {
+      size_to_copy_bytes *= sizeof(int);
+    }
+    else if (tensor_type == "double")
+    {
+      size_to_copy_bytes *= sizeof(double);
+    }
+    else // Unknown type
+    {
+      std::string message = "[ERROR] write_tensor_to_gnx_nif: unknown tensor type: " + tensor_type;
+      return enif_raise_exception(env, enif_make_string(env, message.c_str(), ERL_NIF_LATIN1)); 
+    }
+  }
+  else
+  {
+    return enif_make_badarg(env);
+  }
+
   try {
     // Write the tensor data from the binary to the GNx buffer on the device
-    open_cl->writeBuffer(*gnx_buffer, (void *)tensor_data.data, tensor_data.size, OCLInterface::DeviceType::GPU);
+    open_cl->writeBuffer(*gnx_buffer, (void *)tensor_data.data, size_to_copy_bytes, OCLInterface::DeviceType::GPU);
 
     if (debug_logs)
     {
