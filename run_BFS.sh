@@ -20,7 +20,7 @@ echo "Running BFS benchmark WITHOUT GPU acceleration..."
 for ((i=1; i<=N; i++)); do
     mix run benchmarks/cooperative/bfs/BFS.exs \
         benchmarks/cooperative/bfs/NYR_input.dat \
-        4096
+        4096 | grep "BFS took:"
 done
 
 # Execute the command N times - With GPU
@@ -30,5 +30,5 @@ echo "Running BFS benchmark USING GPU acceleration..."
 for ((i=1; i<=N; i++)); do
     mix run benchmarks/cooperative/bfs/BFS.exs \
         benchmarks/cooperative/bfs/NYR_input.dat \
-        1024
+        1024 | grep "BFS took:"
 done
