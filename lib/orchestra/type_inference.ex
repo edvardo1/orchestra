@@ -422,24 +422,20 @@ defmodule Orchestra.TypeInference do
             end
 
           # Array has type int, float and so on
-          {map, :tint} ->
+          {map, t} when t in [:tint, :tatomic_int] ->
             map
             |> set_type_exp(:int, acc_exp)
             |> set_type_exp(:int, exp)
 
-          {map, :tfloat} ->
+          {map, t} when t in [:tfloat, :tatomic_float] ->
             map
             |> set_type_exp(:int, acc_exp)
             |> set_type_exp(:float, exp)
 
-          {map, :tdouble} ->
+          {map, t} when t in [:tdouble, :tatomic_double] ->
             map
             |> set_type_exp(:int, acc_exp)
             |> set_type_exp(:double, exp)
-
-          # Array is an atomic. Can't do that!!
-          {_map, t} when OrchestraFunctions.is_atomic_type(t) ->
-            raise "Error: directly assigning to array index of an atomic variable is not allowed."
         end
 
       # Assignment to variable
