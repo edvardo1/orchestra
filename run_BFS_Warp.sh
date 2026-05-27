@@ -33,7 +33,7 @@ echo "----------------------------------------"
 for ((i=1; i<=N; i++)); do
     mix run benchmarks/cooperative/bfs/BFS-Warp.exs \
         "$BENCHMARK_PATH" \
-        5000 | grep "BFS-Warp took:"
+        500000 | grep "BFS-Warp took:"
 done
 
 echo ""
