@@ -176,6 +176,9 @@ Orchestra.defmodule BFS do
     __local(shift[1])
     __atomic_local(local_free_idx[1])
 
+    # Declare node_idx
+    node_idx = 0
+
     if switched_to_gpu_flag == 1 && tid < frontier_size do
       # If we just switched to GPU, we need to initialize the visited array real quick
       node_idx = frontier[tid]
@@ -368,7 +371,7 @@ Orchestra.defmodule BFS do
           num_blocks = div(frontier_size + threads_per_block - 1, threads_per_block)
 
           Orchestra.spawn(
-            &BFS.gpu_bfs_kernel/9,
+            &BFS.gpu_bfs_kernel/10,
             {num_blocks},
             {threads_per_block},
             [
