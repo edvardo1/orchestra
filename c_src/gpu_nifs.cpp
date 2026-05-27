@@ -1679,7 +1679,7 @@ static ERL_NIF_TERM write_tensor_to_gnx_nif(ErlNifEnv *env, int argc, const ERL_
   else if (enif_is_number(env, e_elements_to_copy))
   {
     // Save number of elements to copy in size_to_copy_bytes
-    if (!enif_get_int(env, e_elements_to_copy, (int *)&size_to_copy_bytes))
+    if (!enif_get_ulong(env, e_elements_to_copy, &size_to_copy_bytes))
     {
       return enif_make_badarg(env);
     }
@@ -1696,7 +1696,7 @@ static ERL_NIF_TERM write_tensor_to_gnx_nif(ErlNifEnv *env, int argc, const ERL_
     {
       return enif_make_badarg(env);
     }
-    
+
     if (tensor_type == "float")
     {
       size_to_copy_bytes *= sizeof(float);
@@ -1717,6 +1717,15 @@ static ERL_NIF_TERM write_tensor_to_gnx_nif(ErlNifEnv *env, int argc, const ERL_
   }
   else
   {
+    return enif_make_badarg(env);
+  }
+
+  // Check if size to copy isn't greater than the actual tensor data size
+  if (size_to_copy_bytes > tensor_data.size)
+  {
+    std::cerr << "[ERROR] write_tensor_to_gnx_nif: The specified size to copy is greater than the actual tensor data size." << std::endl;
+    std::cerr << " - Size to copy (bytes): " << size_to_copy_bytes << std::endl;
+    std::cerr << " - Actual tensor data size (bytes): " << tensor_data.size << std::endl;
     return enif_make_badarg(env);
   }
 
