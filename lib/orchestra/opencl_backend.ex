@@ -409,7 +409,8 @@ defmodule Orchestra.OpenCLBackend do
         "float #{name}[#{index}];"
 
       # Work-group shared memory declaration
-      {shared_atom, _, [{{:., _, [Access, :get]}, _, [arg1, arg2]}]} when shared_atom in [:__shared__, :__local] ->
+      {shared_atom, _, [{{:., _, [Access, :get]}, _, [arg1, arg2]}]}
+      when shared_atom in [:__shared__, :__local] ->
         name = gen_exp(arg1)
         index = gen_exp(arg2)
         send(:types_server, {:check_var, name, self()})
@@ -559,6 +560,23 @@ defmodule Orchestra.OpenCLBackend do
 
           [a1, a2] ->
             "(#{gen_exp(a1)} #{to_string(op)} #{gen_exp(a2)})"
+        end
+
+      # Support for bitwise operators
+      {op, _, args} when op in [:<<<, :>>>, :~>>, :&&&, :|||, :+++] ->
+        str_op =
+          case op do
+            :<<< -> "<<"
+            :>>> -> ">>"
+            :~>> -> "%"
+            :&&& -> "&"
+            :||| -> "|"
+            :+++ -> "^"
+          end
+
+        case args do
+          [a1, a2] ->
+            "(#{gen_exp(a1)} #{str_op} #{gen_exp(a2)})"
         end
 
       {var, _, nil} when is_atom(var) ->
