@@ -1756,6 +1756,6 @@ static ErlNifFunc nif_funcs[] = {
     {"is_nx_aligned_nif", 1, is_nx_aligned_nif, 0},
     {"map_nx_svm_nif", 3, map_nx_svm_nif, 0},
     {"unmap_nx_svm_nif", 1, unmap_nx_svm_nif, 0},
-    {"write_tensor_to_gnx_nif", 2, write_tensor_to_gnx_nif, 0}};
+    {"write_tensor_to_gnx_nif", 4, write_tensor_to_gnx_nif, 0}};
 
 ERL_NIF_INIT(Elixir.Orchestra, nif_funcs, &load, NULL, NULL, &unload)
