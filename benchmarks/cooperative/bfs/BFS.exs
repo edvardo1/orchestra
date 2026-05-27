@@ -449,43 +449,40 @@ end
 default_cpu_limit = 1024
 
 # Getting name of file to process. The user can specify
-argv = System.argv()
-argv_len = length(argv)
-
-{file, cpu_limit, it} =
+{file, cpu_limit, rep} =
   case argv_len do
     1 ->
       [f] = argv
       # Default cpu limit
-      {f, default_cpu_limit, :infinity}
+      {f, default_cpu_limit, 1}
 
     2 ->
       [f, c] = argv
       c = String.to_integer(c)
 
       if c > 0 do
-        {f, c, :infinity}
+        {f, c, 1}
       else
-        {f, default_cpu_limit, :infinity}
+        {f, default_cpu_limit, 1}
       end
 
     3 ->
-      [f, c, i] = argv
+      [f, c, r] = argv
       c = String.to_integer(c)
-      i = String.to_integer(i)
+      r = String.to_integer(r)
 
       c = if c > 0, do: c, else: default_cpu_limit
-      i = if i > 0, do: i, else: :infinity
+      r = if r > 0, do: r, else: 1
 
-      {f, c, i}
+      {f, c, r}
 
     _ ->
       IO.puts(
-        "Usage: mix run #{Path.basename(__ENV__.file)} FILE_PATH CPU_LIMIT [MAX_ITERATIONS]\n"
+        "Usage: mix run #{Path.basename(__ENV__.file)} FILE_PATH CPU_LIMIT [REPEATS]\n"
       )
 
       IO.puts(
-        "The MAX_ITERATIONS is an optional parameter that must be a positive number greater than 0. It specifies how many levels of the graph the algorithm is allowed to explore. If omitted, BFS will assume infinite iterations are allowed."
+        "The REPEATS is an optional parameter that must be a positive number greater than 0. It specifies how many times the algorithm will repeat. If omitted, the default REPEATS is 1."
       )
 
       IO.puts(
@@ -507,11 +504,17 @@ IO.puts(
   "Time taken to read input file: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms"
 )
 
-IO.puts("\n--- Starting BFS with CPU limit: #{cpu_limit} and max iterations: #{it} ---")
+IO.puts("\n--- Starting BFS with CPU limit: #{cpu_limit} and repeats: #{rep} ---")
 
-start = System.monotonic_time()
-used_gpu = BFS.bfs(graph_map, cpu_limit, it)
-stop = System.monotonic_time()
+Enum.each(
+  1..rep,
+  fn i ->
+    IO.puts("\n--- Iteration #{i} ---")
+    start = System.monotonic_time()
+    used_gpu = BFS.bfs(graph_map, cpu_limit)
+    stop = System.monotonic_time()
 
-IO.puts("BFS took: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms")
-IO.puts("BFS used GPU: #{used_gpu}")
+    IO.puts("BFS took: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms")
+    IO.puts("BFS used GPU: #{used_gpu}")
+  end
+)
