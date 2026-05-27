@@ -33,7 +33,7 @@ echo "----------------------------------------"
 for ((i=1; i<=N; i++)); do
     mix run benchmarks/cooperative/bfs/BFS.exs \
         "$BENCHMARK_PATH" \
-        500000 | grep "BFS took:"
+        500000 | grep -E "BFS took:|BFS used GPU:"
 done
 
 echo ""
@@ -46,5 +46,5 @@ echo "----------------------------------------"
 for ((i=1; i<=N; i++)); do
     mix run benchmarks/cooperative/bfs/BFS.exs \
         "$BENCHMARK_PATH" \
-        1024 | grep "BFS took:"
+        1024 | grep -E "BFS took:|BFS used GPU:"
 done

@@ -33,7 +33,7 @@ echo "----------------------------------------"
 for ((i=1; i<=N; i++)); do
     mix run benchmarks/cooperative/bfs/BFS-Warp.exs \
         "$BENCHMARK_PATH" \
-        500000 | grep "BFS-Warp took:"
+        500000 | grep -E "BFS-Warp took:|BFS-Warp used GPU:"
 done
 
 echo ""
@@ -46,5 +46,5 @@ echo "----------------------------------------"
 for ((i=1; i<=N; i++)); do
     mix run benchmarks/cooperative/bfs/BFS-Warp.exs \
         "$BENCHMARK_PATH" \
-        1024 | grep "BFS-Warp took:"
+        1024 | grep -E "BFS-Warp took:|BFS-Warp used GPU:"
 done
