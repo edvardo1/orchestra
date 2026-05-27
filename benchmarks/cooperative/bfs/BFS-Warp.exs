@@ -180,7 +180,7 @@ Orchestra.defmodule BFS do
     lane_id = tid ~>> warp_size
 
     # Declare block-level buffers
-    __local(local_buffer[512])
+    __local(local_buffer[2048])
     __local(shift[1])
     __atomic_local(local_free_idx[1])
 
@@ -216,7 +216,7 @@ Orchestra.defmodule BFS do
           if was_visited == 0 do
             idx = add_atomic_int(local_free_idx, 1)
 
-            if idx < 512 do
+            if idx < 2048 do
               local_buffer[idx] = dest_node_idx
             else
               # Graceful Fallback (no nodes left behind)
@@ -236,8 +236,8 @@ Orchestra.defmodule BFS do
     # --- FLUSH LOCAL BUFFER ---
     priv_buffer_size = load_atomic_int(local_free_idx)
 
-    if priv_buffer_size > 512 do
-      priv_buffer_size = 512
+    if priv_buffer_size > 2048 do
+      priv_buffer_size = 2048
     end
 
     if lid == 0 do
