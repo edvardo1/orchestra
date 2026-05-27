@@ -170,7 +170,7 @@ Orchestra.defmodule BFS do
     tid = get_global_id(0)
     lid = get_local_id(0)
 
-    # Declare a local buffer for this thread
+    # Declare block-level buffers
     __local(local_buffer[256])
     __local(shift[1])
     __atomic_local(local_free_idx[1])
@@ -187,31 +187,34 @@ Orchestra.defmodule BFS do
     if tid < frontier_size && tid < n_nodes do
       # Get node to process in this thread
       node_idx = frontier[tid]
-      # Mark it as visited
-      was_visited = max_atomic_int(visited + node_idx, 1)
 
-      # -- Get node info --
-      # Node edges index in edges array
+      # Get node info
       node_edges_idx = nodes[node_idx * 2 + 0]
-      # Number of edges this node has
       node_num_edges = nodes[node_idx * 2 + 1]
 
       for i in range(node_edges_idx, node_edges_idx + node_num_edges) do
         # Getting child node
         dest_node_idx = edges[i * 2 + 0]
 
-        # Mark as visited and check if it was already visited in the same atomic operation
-        was_visited = max_atomic_int(visited + dest_node_idx, 1)
+        # Here I'm using an optimization trick. First, we read the visited value for this node.
+        # If it is already visited, we can skip. If it appears unvisited, ONLY THEN we perform
+        # the atomic operation. This optimization technique is known as Test-and-Test-and-Set (TTAS)
+        was_visited = visited[dest_node_idx]
 
-        # Check if this node was visited
         if was_visited == 0 do
-          # Update local buffer with this node
-          idx = add_atomic_int(local_free_idx, 1)
+          was_visited = max_atomic_int(visited + dest_node_idx, 1)
 
-          if idx < 256 do
-            local_buffer[idx] = dest_node_idx
-          else
-            overflow[0] = 1
+          # Check if WE were the thread that successfully claimed it
+          if was_visited == 0 do
+            # Update local buffer with this node
+            idx = add_atomic_int(local_free_idx, 1)
+
+            if idx < 256 do
+              # Add this node to the local buffer of the work group
+              local_buffer[idx] = dest_node_idx
+            else
+              overflow[0] = 1
+            end
           end
         end
       end
@@ -221,6 +224,11 @@ Orchestra.defmodule BFS do
     __syncthreads()
 
     priv_buffer_size = load_atomic_int(local_free_idx)
+
+    # Cap size of local flush to 256
+    if priv_buffer_size > 256 do
+      priv_buffer_size = 256
+    end
 
     if lid == 0 do
       shift[0] = add_atomic_int(next_slot, priv_buffer_size)
@@ -248,8 +256,6 @@ Orchestra.defmodule BFS do
         cpu_limit,
         max_iterations \\ :infinity
       ) do
-    IO.puts("============== Creating Tensors... ==============")
-
     frontier_size = 1
 
     start = System.monotonic_time()
@@ -286,8 +292,6 @@ Orchestra.defmodule BFS do
       "Tensor creation took: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms"
     )
 
-    IO.puts("============== Starting Recursion ==============")
-
     bfs_recursion(nodes_map, frontier_size, tensor_map, max_iterations, cpu_limit, :cpu, false)
   end
 
@@ -299,7 +303,7 @@ Orchestra.defmodule BFS do
           cpu_limit :: integer(),
           last_device :: :cpu | :gpu,
           used_gpu :: boolean()
-        ) :: :ok
+        ) :: boolean()
   # End BFS when frontier size goes to 0
   defp bfs_recursion(_map, 0, _tensor_map, _max_iterations, _cpu_limit, _last_device, used_gpu),
     do: used_gpu
@@ -455,6 +459,9 @@ Orchestra.defmodule BFS do
   end
 end
 
+# Setting default cpu_limit
+default_cpu_limit = 1024
+
 # Getting name of file to process. The user can specify
 argv = System.argv()
 argv_len = length(argv)
@@ -463,8 +470,8 @@ argv_len = length(argv)
   case argv_len do
     1 ->
       [f] = argv
-      # Default cpu limit is 512
-      {f, 512, :infinity}
+      # Default cpu limit
+      {f, default_cpu_limit, :infinity}
 
     2 ->
       [f, c] = argv
@@ -473,7 +480,7 @@ argv_len = length(argv)
       if c > 0 do
         {f, c, :infinity}
       else
-        {f, 512, :infinity}
+        {f, default_cpu_limit, :infinity}
       end
 
     3 ->
@@ -481,11 +488,10 @@ argv_len = length(argv)
       c = String.to_integer(c)
       i = String.to_integer(i)
 
-      if i > 0 and c > 0 do
-        {f, c, i}
-      else
-        {f, 512, :infinity}
-      end
+      c = if c > 0, do: c, else: default_cpu_limit
+      i = if i > 0, do: i, else: :infinity
+
+      {f, c, i}
 
     _ ->
       IO.puts(
@@ -497,7 +503,7 @@ argv_len = length(argv)
       )
 
       IO.puts(
-        "The CPU_LIMIT is an optional parameter that must be a positive number greater than 0. It specifies the maximum frontier size that will be processed on the CPU. If the frontier size exceeds this limit, it will be processed on the GPU. If omitted, the default CPU_LIMIT is 512."
+        "The CPU_LIMIT is an optional parameter that must be a positive number greater than 0. It specifies the maximum frontier size that will be processed on the CPU. If the frontier size exceeds this limit, it will be processed on the GPU. If omitted, the default CPU_LIMIT is #{default_cpu_limit}."
       )
 
       System.halt(0)
@@ -509,13 +515,11 @@ start = System.monotonic_time()
 graph_map = CsrReader.read_and_process_file(file)
 stop = System.monotonic_time()
 
-IO.inspect(graph_map)
-
 IO.puts(
   "Time taken to read input file: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms"
 )
 
-IO.puts("--- Starting BFS with CPU limit: #{cpu_limit} and max iterations: #{it} ---")
+IO.puts("\n--- Starting BFS with CPU limit: #{cpu_limit} and max iterations: #{it} ---")
 
 start = System.monotonic_time()
 used_gpu = BFS.bfs(graph_map, cpu_limit, it)
