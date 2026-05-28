@@ -214,11 +214,15 @@ defmodule Orchestra do
 
   def get_type(%Nx.Tensor{type: type}), do: type
 
+  def get_type(_ctx, %Nx.Tensor{type: type}), do: type
+
   def get_shape_gnx(_ctx, {{:nx, _type, shape, _name, _ref}, _gnx_ctx}), do: shape
 
   def get_shape_gnx({{:nx, _type, shape, _name, _ref}, _gnx_ctx}), do: shape
 
   def get_shape(%Nx.Tensor{shape: shape}), do: shape
+
+  def get_shape(_ctx, %Nx.Tensor{shape: shape}), do: shape
 
   # ===== Context Initializers -- based on MONAD pattern =====
   def cpu() do
