@@ -23,7 +23,7 @@ defmodule Orchestra.MixProject do
   defp deps do
     [
       {:nx, "~> 0.12.1"},
-      {:exla, "~> 0.12.0"}
+      {:csv, "~> 3.2.2"}
     ]
   end
 end
