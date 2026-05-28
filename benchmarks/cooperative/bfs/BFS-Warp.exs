@@ -304,19 +304,54 @@ Orchestra.defmodule BFS do
   @spec bfs_recursion(
           nodes_map :: map(),
           frontier_size :: integer(),
-          tensor_map :: map(),
+          tensor_map :: %{
+            frontier: Nx.Tensor.t(),
+            new_frontier: Nx.Tensor.t(),
+            visited: Nx.Tensor.t(),
+            next_idx: Nx.Tensor.t(),
+            frontier_gnx: term(),
+            new_frontier_gnx: term(),
+            visited_gnx: term(),
+            next_idx_gnx: term(),
+            nodes_gnx: term(),
+            edges_gnx: term()
+          },
           max_iterations :: :infinity | integer(),
           cpu_limit :: integer(),
           last_device :: :cpu | :gpu,
           used_gpu :: boolean()
-        ) :: boolean()
+        ) :: {boolean(), Nx.Tensor.t()}
   # End BFS when frontier size goes to 0
-  defp bfs_recursion(_map, 0, _tensor_map, _max_iterations, _cpu_limit, _last_device, used_gpu),
-    do: used_gpu
+  defp bfs_recursion(_map, 0, tensor_map, _max_iterations, _cpu_limit, last_device, used_gpu) do
+    tensor_map =
+      if last_device == :gpu do
+        Orchestra.with Orchestra.gpu() do
+          Map.merge(tensor_map, %{
+            visited: Orchestra.get_gnx(tensor_map.visited_gnx, tensor_map.visited)
+          })
+        end
+      else
+        tensor_map
+      end
+
+    {used_gpu, tensor_map.visited}
+  end
 
   # End BFS when max_iterations becomes 0
-  defp bfs_recursion(_map, _frontier_size, _tensor_map, 0, _cpu_limit, _last_device, used_gpu),
-    do: used_gpu
+  defp bfs_recursion(_map, _frontier_size, tensor_map, 0, _cpu_limit, last_device, used_gpu) do
+    tensor_map =
+      if last_device == :gpu do
+        Orchestra.with Orchestra.gpu() do
+          Map.merge(tensor_map, %{
+            visited: Orchestra.get_gnx(tensor_map.visited_gnx, tensor_map.visited)
+          })
+        end
+      else
+        tensor_map
+      end
+
+    {used_gpu, tensor_map.visited}
+  end
 
   defp bfs_recursion(
          %{
@@ -325,18 +360,7 @@ Orchestra.defmodule BFS do
            edges: edges_tensor
          } = nodes_map,
          frontier_size,
-         %{
-           frontier: frontier_tensor,
-           new_frontier: new_frontier_tensor,
-           visited: visited_tensor,
-           next_idx: next_idx_tensor,
-           frontier_gnx: frontier_gnx,
-           new_frontier_gnx: new_frontier_gnx,
-           visited_gnx: visited_gnx,
-           next_idx_gnx: next_idx_gnx,
-           nodes_gnx: nodes_gnx,
-           edges_gnx: edges_gnx
-         } = tensor_map,
+         tensor_map,
          max_iterations,
          cpu_limit,
          last_device,
@@ -346,16 +370,16 @@ Orchestra.defmodule BFS do
       if frontier_size > cpu_limit do
         # ----- Running on GPU -----
 
-          if last_device == :cpu do
-            # If we are switching from CPU to GPU, we need to copy the frontier and visited tensors
-            Orchestra.write_gnx(frontier_gnx, frontier_tensor, frontier_size)
-            Orchestra.write_gnx(visited_gnx, visited_tensor, nil)
-          end
+        if last_device == :cpu do
+          # If we are switching from CPU to GPU, we need to copy the frontier and visited tensors
+          Orchestra.write_gnx(tensor_map.frontier_gnx, tensor_map.frontier, frontier_size)
+          Orchestra.write_gnx(tensor_map.visited_gnx, tensor_map.visited, nil)
+        end
 
         Orchestra.with Orchestra.gpu() do
           # We have to zero out the next_idx tensor on the GPU before each iteration.
           # The 'next_idx_tensor' will always be zero before every iteration, so we can just copy it.
-          Orchestra.write_gnx(next_idx_gnx, next_idx_tensor, 1)
+          Orchestra.write_gnx(tensor_map.next_idx_gnx, tensor_map.next_idx, 1)
 
           # We now need 32 threads for every single node in the frontier
           total_threads_needed = frontier_size * 32
@@ -368,33 +392,45 @@ Orchestra.defmodule BFS do
             {num_blocks},
             {threads_per_block},
             [
-              nodes_gnx,
+              tensor_map.nodes_gnx,
               total_nodes,
-              edges_gnx,
-              frontier_gnx,
+              tensor_map.edges_gnx,
+              tensor_map.frontier_gnx,
               frontier_size,
-              new_frontier_gnx,
-              next_idx_gnx,
-              visited_gnx
+              tensor_map.new_frontier_gnx,
+              tensor_map.next_idx_gnx,
+              tensor_map.visited_gnx
             ]
           )
 
           # After GPU execution, only take the next_idx tensor back
           # We will leave the heavy boys on the GPU
-          Orchestra.get_gnx(next_idx_gnx, next_idx_tensor)
+          tensor_map =
+            Map.merge(tensor_map, %{
+              next_idx: Orchestra.get_gnx(tensor_map.next_idx_gnx, tensor_map.next_idx)
+            })
 
           {tensor_map, :gpu, true}
         end
       else
         # ----- Running on CPU -----
 
-        if last_device == :gpu do
-          # If we are switching from GPU to CPU, we need to copy the frontier and visited tensors back to the CPU
-          Orchestra.with Orchestra.gpu() do
-            Orchestra.get_gnx(frontier_gnx, frontier_tensor, frontier_size)
-            Orchestra.get_gnx(visited_gnx, visited_tensor)
+        tensor_map =
+          if last_device == :gpu do
+            # If we are switching from GPU to CPU, we need to copy the frontier and visited tensors back to the CPU
+            Orchestra.with Orchestra.gpu() do
+              Map.merge(
+                tensor_map,
+                %{
+                  frontier:
+                    Orchestra.get_gnx(tensor_map.frontier_gnx, tensor_map.frontier, frontier_size),
+                  visited: Orchestra.get_gnx(tensor_map.visited_gnx, tensor_map.visited)
+                }
+              )
+            end
+          else
+            tensor_map
           end
-        end
 
         Orchestra.with Orchestra.cpu() do
           Orchestra.spawn(
@@ -405,11 +441,11 @@ Orchestra.defmodule BFS do
               nodes_tensor,
               total_nodes,
               edges_tensor,
-              frontier_tensor,
+              tensor_map.frontier,
               frontier_size,
-              new_frontier_tensor,
-              next_idx_tensor,
-              visited_tensor
+              tensor_map.new_frontier,
+              tensor_map.next_idx,
+              tensor_map.visited
             ]
           )
 
@@ -419,19 +455,19 @@ Orchestra.defmodule BFS do
         end
       end
 
+    # Updating frontier size for the next iteration
+    new_frontier_size = Nx.to_number(tensor_map.next_idx[0])
+
     # For the next iteration, the next free index will be reset and the current frontier and new
     # frontier will be swapped. We will also zero out the next_idx tensor for the next iteration
     tensor_map =
       Map.merge(tensor_map, %{
         next_idx: Orchestra.tensor([0], :s32),
-        frontier: new_frontier_tensor,
-        new_frontier: frontier_tensor,
-        frontier_gnx: new_frontier_gnx,
-        new_frontier_gnx: frontier_gnx
+        frontier: tensor_map.new_frontier,
+        new_frontier: tensor_map.frontier,
+        frontier_gnx: tensor_map.new_frontier_gnx,
+        new_frontier_gnx: tensor_map.frontier_gnx
       })
-
-    # Updating frontier size for the next iteration
-    new_frontier_size = Nx.to_number(next_idx_tensor[0])
 
     remaining_iterations =
       cond do
@@ -486,9 +522,7 @@ argv_len = length(argv)
       {f, c, r}
 
     _ ->
-      IO.puts(
-        "Usage: mix run #{Path.basename(__ENV__.file)} FILE_PATH CPU_LIMIT [REPEATS]\n"
-      )
+      IO.puts("Usage: mix run #{Path.basename(__ENV__.file)} FILE_PATH CPU_LIMIT [REPEATS]\n")
 
       IO.puts(
         "The REPEATS is an optional parameter that must be a positive number greater than 0. It specifies how many times the algorithm will repeat. If omitted, the default REPEATS is 1."
@@ -507,7 +541,7 @@ start = System.monotonic_time()
 graph_map = CsrReader.read_and_process_file(file)
 stop = System.monotonic_time()
 
-IO.inspect(graph_map, label: "Graph Map")
+# IO.inspect(graph_map, label: "Graph Map")
 
 IO.puts(
   "Time taken to read input file: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms"
@@ -520,10 +554,20 @@ Enum.each(
   fn i ->
     IO.puts("\n--- Iteration #{i} ---")
     start = System.monotonic_time()
-    used_gpu = BFS.bfs(graph_map, cpu_limit)
+    {used_gpu, visited_tensor} = BFS.bfs(graph_map, cpu_limit)
     stop = System.monotonic_time()
 
     IO.puts("BFS-Warp took: #{System.convert_time_unit(stop - start, :native, :millisecond)}ms")
     IO.puts("BFS-Warp used GPU: #{used_gpu}")
+    # IO.inspect(visited_tensor, label: "Visited Tensor")
+
+    # Check if visited tensor has only 1's
+    all_visited =
+      visited_tensor
+      |> Nx.equal(1)
+      |> Nx.all()
+      |> Nx.to_number()
+
+    IO.puts("All nodes visited: #{all_visited == 1}\n")
   end
 )
