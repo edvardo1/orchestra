@@ -33,5 +33,6 @@ mix.lock
 build/
 CMake/
 
-# Ignore local tools
-local_tools/
+# Ignore local tools .txt and .dat files
+local_tools/*.txt
+local_tools/*.dat
