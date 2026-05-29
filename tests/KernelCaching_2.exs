@@ -1,5 +1,7 @@
 require Orchestra
 
+# Orchestra.set_debug_logs(true)
+
 Orchestra.defmodule PMap do
   defk map_ker(a1, a2, size, f) do
     index = blockIdx.x * blockDim.x + threadIdx.x
@@ -10,8 +12,12 @@ Orchestra.defmodule PMap do
     end
   end
 
-  defd inc(x) do
-    x + 1
+  defd sum_10(x) do
+    x + 10
+  end
+
+  defd mul_2(x) do
+    x * 2
   end
 
   def map(input, f) do
@@ -40,8 +46,20 @@ end
 
 a = Orchestra.tensor(Enum.to_list(1..1024), :s32)
 
-IO.inspect(a, label: "Initial tensor")
+IO.puts("Running kernel with anonymous function: x * 2")
 
-result = a |> PMap.map(&PMap.inc/1)
+result = a |> PMap.map(&PMap.mul_2/1)
 
-IO.inspect(result, label: "Result after kernel")
+IO.inspect(result, label: "Result")
+
+IO.puts("Running kernel with anonymous function: x + 10")
+
+result = a |> PMap.map(&PMap.sum_10/1)
+
+IO.inspect(result, label: "Result")
+
+IO.puts("Running kernel with anonymous function: x * 2 again")
+
+result = result |> PMap.map(&PMap.mul_2/1)
+
+IO.inspect(result, label: "Result")
